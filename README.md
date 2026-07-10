@@ -28,13 +28,13 @@ Python with `osmnx`, `geopandas`, `shapely`, `requests`, `pandas`, and `pyproj`,
 
 ## Potential Strategies
 
-https://dl.acm.org/doi/epdf/10.1145/3402818
-https://ieeexplore.ieee.org/document/9954183
-https://ieeexplore.ieee.org/document/10054494
-https://ieeexplore.ieee.org/document/11158939/authors#authors
-https://books.google.co.uk/books?hl=en&lr=&id=uxyLEQAAQBAJ&oi=fnd&pg=PA163&ots=TSEWffiAG0&sig=ntUpcfEGEJEnCSHxZitfwqb1zGM#v=onepage&q&f=false
-https://ieeexplore.ieee.org/document/11388906
-https://ieeexplore.ieee.org/document/11355049
-https://dl.acm.org/doi/10.1145/3402818#core-cited-by
+- https://dl.acm.org/doi/epdf/10.1145/3402818
+- https://ieeexplore.ieee.org/document/9954183
+- https://ieeexplore.ieee.org/document/10054494
+- https://ieeexplore.ieee.org/document/11158939/authors#authors
+- https://books.google.co.uk/books?hl=en&lr=&id=uxyLEQAAQBAJ&oi=fnd&pg=PA163&ots=TSEWffiAG0&sig=ntUpcfEGEJEnCSHxZitfwqb1zGM#v=onepage&q&f=false
+- https://ieeexplore.ieee.org/document/11388906
+- https://ieeexplore.ieee.org/document/11355049
+- https://dl.acm.org/doi/10.1145/3402818#core-cited-by
 
 
