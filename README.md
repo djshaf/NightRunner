@@ -52,23 +52,23 @@ Python with `osmnx`, `geopandas`, `shapely`, `requests`, `pandas`, `pyproj`, and
 
 # ML/NN pipeline
 
-# Purpose
+## Purpose
 Processes historical street-level crime and stop-and-search features, trains a machine learning model to forecast future crime risk, and transforms those predictions into physical routing penalties for integration with pedestrian routing engines.
 
-# Data Restructuring
+## Data Restructuring
 The initial wide-format dataset is melted and pivoted into a model-ready long-format time-series structure. Each row now represents a single street segment (edge_id) during a single specific month.
 
-# Feature Engineering
+## Feature Engineering
 Temporal lag features are engineered to provide the model with historical context. Using a grouped shift operation strictly isolated by edge_id, the pipeline generates 1-month, 2-month, and 3-month lookback columns (e.g., crime_count_lag_1, crime_severity_sum_lag_2, stop_search_count_lag_1). All-time cumulative columns and concurrent target metrics are deliberately dropped from the feature set to prevent data leakage.
 
-# Validation Strategy
+## Validation Strategy
 Data is split chronologically. Random train/test splits (which cause time-travel data leakage) are strictly avoided. The model trains on historical months and validates on a held-out future cutoff period.
 
-# Model Architecture
+## Model Architecture
 An XGBoost Regressor is used as the baseline spatial-temporal forecaster. The algorithm natively handles categorical spatial attributes (e.g., highway tags like "residential" or "pedestrian") without requiring one-hot encoding. Early stopping is configured using the evaluation set to halt tree construction when predictive accuracy plateaus.
 
-# Future Prediction and Cost Scaling
+## Future Prediction and Cost Scaling
 To forecast an unknown future month, the latest available month's actual data is programmatically shifted forward to become the new lag_1. Once raw future crime counts are predicted, they are converted into a spatial density metric (predicted_crime / length). This density is normalized via Min-Max scaling into an edge_safety_cost scale. A minimum base cost of 1.0 is strictly enforced to ensure downstream graph traversal algorithms do not encounter zero-weight edges.
 
-# Outputs
+## Outputs
 One file in the output directory: osm_safety_tags.csv. This contains only the edge_id and the safety_tag_value, providing a clean mapping table to inject custom penalty tags (e.g., safety_cost=8) into the raw .osm.pbf map file before building the Valhalla routing graph. Node-level aggregations are excluded as Valhalla requires continuous edge penalties to prevent routing down the length of dangerous streets.
