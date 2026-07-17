@@ -16,9 +16,17 @@ The street network is obtained from OpenStreetMap through OSMnx, using the pedes
 
 Requests January 2021 to June 2026. data.police.uk only keeps a rolling ~3 year window, so `resolve_months()` checks what is actually published each run and clips the request accordingly, printing a note if the start date had to move. Earliest currently available: 2023-06. Console output states exactly which months are included.
 
-## Crime Severity
+## Two Crime Weightings, Not One
 
-Category (crime type) comes directly from the API. Severity does not, the API has no seriousness field, so a 1 to 3 tier has been added based on Sherman, Neyroud and Neyroud (2016) 'The Cambridge Crime Harm Index', Policing: A Journal of Policy and Practice, 10(3), and the ONS (2016) Crime Severity Score methodology. A coarse simplification onto police.uk's 14 categories, not a reproduction of either paper's exact weights.
+`crime_severity` is harm-based (1 to 3), from Sherman, Neyroud and Neyroud (2016) 'The Cambridge Crime Harm Index', Policing: A Journal of Policy and Practice, 10(3), and the ONS (2016) Crime Severity Score methodology, both weight by sentencing severity.
+
+`crime_perceived_risk` is a separate new column (1 to 4), how unsafe a crime makes an area feel, not how harmful it legally is. Based on Innes (2004) 'Signal crimes and signal disorders', British Journal of Sociology, 55(3), and Innes and Fielding (2002), Sociological Research Online, 7(2): the Signal Crimes Perspective, visible disorder like anti-social behaviour disproportionately drives fear of crime independent of its statistical severity. Also informed by ONS Crime Survey for England and Wales (CSEW) perception/ASB releases. Under this column anti-social behaviour (3) scores above burglary (2), the reverse of the severity ordering, deliberately.
+
+Both are a coarse simplification onto police.uk's 14 categories, not a reproduction of either study's exact weights, cite accordingly.
+
+## Location Anonymisation and Average Spacing
+
+Crime/stop-search coordinates are not exact, each is snapped to the nearest of roughly 680,000 anonymous map points (mostly street centres), each with a catchment of at least 8 postal addresses. No official average spacing figure is published; our own Camden data gives a rough estimate, about 1,384 distinct snap points across Camden's ~21.8 sq km in one 6 month pull, roughly one point every ~125m as an upper bound.
 
 ## Stop and Search
 
@@ -26,7 +34,10 @@ Type, object of search, outcome, and datetime are kept. Gender, age range, and e
 
 ## Monthly Breakdown
 
-`edge_features.csv` carries both an overall total per edge (`crime_count`, `crime_severity_sum`, `stop_search_count`, summed across the full resolved date range) and a per-month breakdown as separate columns, e.g. `crime_count_2024_01`. Lamps are a live snapshot with no time dimension, so are not split by month.
+`edge_features.csv` carries both an overall total per edge (`crime_count`, `crime_severity_sum`, `crime_perceived_risk_sum`, `stop_search_count`, summed across the full resolved date range) and a per-month breakdown as separate columns, e.g. `crime_count_2024_01`. Lamps are a live snapshot with no time dimension, so are not split by month.
+
+## Spatial Lag (Neighbouring Streets)
+`<col>_lag_sum` / `<col>_lag_mean` give the total/average of that column across directly neighbouring edges (edges sharing a junction node), applied to the four overall totals only. **Naming clash to be aware of:** this is a spatial lag (nearby streets, same month). The ML/NN pipeline section below also uses "lag" (e.g. `crime_count_lag_1`) for a temporal lag (same street, previous months). Same word, different axis, do not treat them as the same column.
 
 ## Lamp Features Kept Separate
 
