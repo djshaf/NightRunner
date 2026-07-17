@@ -88,11 +88,19 @@ One file in the output directory: osm_safety_tags.csv. This contains only the ed
 ## References:
 
 Boeing, G. (2017) 'OSMnx: new methods for acquiring, constructing, analyzing, and visualizing complex street networks', Computers, Environment and Urban Systems, 65, pp. 126–139.
+
 Innes, M. (2004) 'Signal crimes and signal disorders: notes on deviance as communicative action', The British Journal of Sociology, 55(3), pp. 335–355.
+
 Innes, M. and Fielding, N. (2002) 'From community to communicative policing: "signal crimes" and the problem of public reassurance', Sociological Research Online, 7(2). Available at: https://doi.org/10.5153/sro.724
+
 London Borough of Camden (2026) Camden Street Lighting Location [Dataset]. Available at: https://opendata.camden.gov.uk/resource/dfq3-8wzu.json (Accessed: 17 July 2026).
+
 Office for National Statistics (2016) Research outputs: developing a Crime Severity Score for England and Wales using data on crimes recorded by the police. Available at: https://www.ons.gov.uk/peoplepopulationandcommunity/crimeandjustice/articles/researchoutputsdevelopingacrimeseverityscoreforenglandandwalesusingdataoncrimesrecordedbythepolice/2016-11-29 (Accessed: 17 July 2026).
+
 Office for National Statistics (2022) Crime Survey for England and Wales (CSEW) perception and Anti-Social Behaviour (ASB) by Police Force Area (PFA) for 2014 and 2021. Available at: https://www.ons.gov.uk/aboutus/transparencyandgovernance/freedomofinformationfoi/crimesurveyforenglandandwalescsewperceptionandantisocialbehaviourasbbypoliceforceareapfafor2014and2021 (Accessed: 17 July 2026).
+
 OpenStreetMap contributors (2026) OpenStreetMap. Available at: https://www.openstreetmap.org (Accessed: 17 July 2026).
+
 Sherman, L., Neyroud, P. and Neyroud, E. (2016) 'The Cambridge Crime Harm Index: measuring total harm from crime based on sentencing guidelines', Policing: A Journal of Policy and Practice, 10(3), pp. 171–183.
+
 Single Online Home National Digital Team (2026) About data.police.uk. Available at: https://data.police.uk/about/ (Accessed: 17 July 2026).
