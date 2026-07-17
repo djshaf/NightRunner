@@ -37,6 +37,7 @@ Type, object of search, outcome, and datetime are kept. Gender, age range, and e
 `edge_features.csv` carries both an overall total per edge (`crime_count`, `crime_severity_sum`, `crime_perceived_risk_sum`, `stop_search_count`, summed across the full resolved date range) and a per-month breakdown as separate columns, e.g. `crime_count_2024_01`. Lamps are a live snapshot with no time dimension, so are not split by month.
 
 ## Spatial Lag (Neighbouring Streets)
+
 `<col>_lag_sum` / `<col>_lag_mean` give the total/average of that column across directly neighbouring edges (edges sharing a junction node), applied to the four overall totals only. **Naming clash to be aware of:** this is a spatial lag (nearby streets, same month). The ML/NN pipeline section below also uses "lag" (e.g. `crime_count_lag_1`) for a temporal lag (same street, previous months). Same word, different axis, do not treat them as the same column.
 
 ## Lamp Features Kept Separate
