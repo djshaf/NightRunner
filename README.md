@@ -10,23 +10,23 @@ This script builds a street level dataset for a running route safety model. Crim
 
 ## Data Sources
 
-The street network is obtained from OpenStreetMap through OSMnx, using the pedestrian network type. Crime data and stop and search data are both obtained from the UK Police open data API, retrieved by month. Street lighting data is obtained from Camden council's open data portal.
+The street network is obtained from OpenStreetMap through OSMnx, using the pedestrian network type. Crime data and stop and search data are both obtained from the UK Police open data API, retrieved by month. Street lighting data is obtained from Camden Council's open data portal.
 
 ## Date Range
 
-Requests January 2021 to June 2026. data.police.uk only keeps a rolling ~3 year window, so `resolve_months()` checks what is actually published each run and clips the request accordingly, printing a note if the start date had to move. Earliest currently available: 2023-06. Console output states exactly which months are included.
+Requests from January 2021 to June 2026. data.police.uk only keeps a rolling ~3 year window, so `resolve_months()` checks what is actually published each run and clips the request accordingly, printing a note if the start date had to move. Earliest currently available: 2023-06. Console output states exactly which months are included.
 
-## Two Crime Weightings, Not One
+## Crime Weightings
 
-`crime_severity` is harm-based (1 to 3), from Sherman, Neyroud and Neyroud (2016) 'The Cambridge Crime Harm Index', Policing: A Journal of Policy and Practice, 10(3), and the ONS (2016) Crime Severity Score methodology, both weight by sentencing severity.
+`crime_severity` is harm-based (1 to 3), from Sherman, Neyroud and Neyroud (2016) 'The Cambridge Crime Harm Index', Policing: A Journal of Policy and Practice, 10(3), and the ONS (2016) Crime Severity Score methodology, both weighted by sentencing severity.
 
-`crime_perceived_risk` is a separate new column (1 to 4), how unsafe a crime makes an area feel, not how harmful it legally is. Based on Innes (2004) 'Signal crimes and signal disorders', British Journal of Sociology, 55(3), and Innes and Fielding (2002), Sociological Research Online, 7(2): the Signal Crimes Perspective, visible disorder like anti-social behaviour disproportionately drives fear of crime independent of its statistical severity. Also informed by ONS Crime Survey for England and Wales (CSEW) perception/ASB releases. Under this column anti-social behaviour (3) scores above burglary (2), the reverse of the severity ordering, deliberately.
+`crime_perceived_risk` is a separate new column (1 to 4), how unsafe a crime makes an area feel, not how harmful it legally is. Based on Innes (2004) 'Signal crimes and signal disorders', British Journal of Sociology, 55(3), and Innes and Fielding (2002), Sociological Research Online, 7(2): the Signal Crimes Perspective, visible disorder like anti-social behaviour disproportionately drives fear of crime independent of its statistical severity. Also informed by ONS Crime Survey for England and Wales (CSEW) perception/ASB releases. Under this column, anti-social behaviour (3) scores above burglary (2), the reverse of the severity ordering, deliberately.
 
-Both are a coarse simplification onto police.uk's 14 categories, not a reproduction of either study's exact weights, cite accordingly.
+Both are coarse simplifications onto police.uk's 14 categories, not a reproduction of either study's exact weights; cite accordingly.
 
 ## Location Anonymisation and Average Spacing
 
-Crime/stop-search coordinates are not exact, each is snapped to the nearest of roughly 680,000 anonymous map points (mostly street centres), each with a catchment of at least 8 postal addresses. No official average spacing figure is published; our own Camden data gives a rough estimate, about 1,384 distinct snap points across Camden's ~21.8 sq km in one 6 month pull, roughly one point every ~125m as an upper bound.
+Crime/stop-search coordinates are not exact; each is snapped to the nearest of roughly 680,000 anonymous map points (mostly street centres), each with a catchment of at least 8 postal addresses. No official average spacing figure is published; our own Camden data gives a rough estimate, about 1,384 distinct snap points across Camden's ~21.8 sq km in one 6-month pull, roughly one point every ~125m as an upper bound.
 
 ## Stop and Search
 
@@ -40,6 +40,10 @@ Type, object of search, outcome, and datetime are kept. Gender, age range, and e
 
 `<col>_lag_sum` / `<col>_lag_mean` give the total/average of that column across directly neighbouring edges (edges sharing a junction node), applied to the four overall totals only. **Naming clash to be aware of:** this is a spatial lag (nearby streets, same month). The ML/NN pipeline section below also uses "lag" (e.g. `crime_count_lag_1`) for a temporal lag (same street, previous months). Same word, different axis, do not treat them as the same column.
 
+## Radius-Weighted Surroundings Density
+
+Alongside the nearest-edge counts above, `edge_features.csv` also has a second, separate method: for four radii (50m, 75m, 125m, 150m), every crime/stop-search within that radius of a street contributes to it, weighted down linearly to zero at the radius edge (a crime right on the street counts fully, one at the edge of the radius counts almost nothing). This is a simplified Kernel Density Estimation (KDE), the standard technique in crime hotspot mapping (Chainey, Tompson and Uhlig, 2008), following the general principle that nearby things matter more than distant ones (Tobler's First Law of Geography, 1970). 125m was chosen deliberately; it matches our own estimate of how far apart data.police.uk's anonymised points are in Camden (see Location Anonymisation above), so it's roughly the smallest radius that reliably spans that uncertainty. Columns: `crime_density_r{R}` / `stop_search_density_r{R}` (weighted count), and `severity_wavg_r{R}` / `perceived_risk_wavg_r{R}` (distance-weighted average) for each radius.
+
 ## Lamp Features Kept Separate
 
 Lamp features (`lamp_count`, `lamp_per_km`, `is_lit`) are no longer merged into `edge_features.csv`. They live in their own `edge_lamp_features.csv`/`.gpkg`, joinable back on `edge_id`. Note: no OSM edge in Camden carries a `lit` tag, so `is_lit` here depends entirely on whether a lamp snapped to that edge.
@@ -48,11 +52,13 @@ Lamp features (`lamp_count`, `lamp_per_km`, `is_lit`) are no longer merged into 
 
 Records with missing coordinates are removed. Coordinate fields are converted to numeric values, and records that fail conversion are removed. Exact duplicate rows are removed. All coordinates are reprojected to British National Grid to enable distance calculations in metres.
 
-Each crime, stop and search, and lamp point is matched to its nearest street edge, within fifty metres for crime and stop and search, twenty five for lamps. Points beyond this are excluded.
+## Street Network References
+
+`osmid` is the true OpenStreetMap way ID for that street (comma-joined if OSMnx merged several OSM ways into one edge), so any row can be looked up directly on openstreetmap.org. u and v are OpenStreetMap's internal node IDs, not human-readable on their own. u_lat, u_lng, v_lat, v_lng sit immediately to their right, giving each endpoint's plain WGS84 coordinates. All four (`osmid`, `u`, `v`, plus the lat/lng pairs) are included in both `edge_features` and `edge_lamp_features`.
 
 ## Street Network References
 
-u and v are OpenStreetMap's internal node IDs, not human readable. u_lat, u_lng, v_lat, v_lng sit immediately to their right, giving each endpoint's plain WGS84 coordinates.
+u and v are OpenStreetMap's internal node IDs, not human-readable. u_lat, u_lng, v_lat, v_lng sit immediately to their right, giving each endpoint's plain WGS84 coordinates.
 
 ## Outputs
 
@@ -89,6 +95,8 @@ One file in the output directory: osm_safety_tags.csv. This contains only the ed
 
 Boeing, G. (2017) 'OSMnx: new methods for acquiring, constructing, analyzing, and visualizing complex street networks', Computers, Environment and Urban Systems, 65, pp. 126–139.
 
+Chainey, S., Tompson, L. and Uhlig, S. (2008) 'The utility of hotspot mapping for predicting spatial patterns of crime', Security Journal, 21(1–2), pp. 4–28.
+
 Innes, M. (2004) 'Signal crimes and signal disorders: notes on deviance as communicative action', The British Journal of Sociology, 55(3), pp. 335–355.
 
 Innes, M. and Fielding, N. (2002) 'From community to communicative policing: "signal crimes" and the problem of public reassurance', Sociological Research Online, 7(2). Available at: https://doi.org/10.5153/sro.724
@@ -104,3 +112,5 @@ OpenStreetMap contributors (2026) OpenStreetMap. Available at: https://www.opens
 Sherman, L., Neyroud, P. and Neyroud, E. (2016) 'The Cambridge Crime Harm Index: measuring total harm from crime based on sentencing guidelines', Policing: A Journal of Policy and Practice, 10(3), pp. 171–183.
 
 Single Online Home National Digital Team (2026) About data.police.uk. Available at: https://data.police.uk/about/ (Accessed: 17 July 2026).
+
+Tobler, W. (1970) 'A computer movie simulating urban growth in the Detroit region', Economic Geography, 46(sup1), pp. 234–240.
