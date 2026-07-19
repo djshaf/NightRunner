@@ -42,7 +42,7 @@ Type, object of search, outcome, and datetime are kept. Gender, age range, and e
 
 ## Radius-Weighted Surroundings Density
 
-Alongside the nearest-edge counts above, `edge_features.csv` also has a second, separate method: for four radii (50m, 75m, 125m, 150m), every crime/stop-search within that radius of a street contributes to it, weighted down linearly to zero at the radius edge (a crime right on the street counts fully, one at the edge of the radius counts almost nothing). This is a simplified Kernel Density Estimation (KDE), the standard technique in crime hotspot mapping (Chainey, Tompson and Uhlig, 2008), following the general principle that nearby things matter more than distant ones (Tobler's First Law of Geography, 1970). 125m was chosen deliberately; it matches our own estimate of how far apart data.police.uk's anonymised points are in Camden (see Location Anonymisation above), so it's roughly the smallest radius that reliably spans that uncertainty. Columns: `crime_density_r{R}` / `stop_search_density_r{R}` (weighted count), and `severity_wavg_r{R}` / `perceived_risk_wavg_r{R}` (distance-weighted average) for each radius.
+Alongside the nearest-edge counts above, `edge_features.csv` also has a second, separate method: for four radii (50m, 75m, 125m, 150m), every crime/stop-search within that radius of a street contributes to it, weighted down linearly to zero at the radius edge (a crime right on the street counts fully, one at the edge of the radius counts almost nothing). This is a simplified Kernel Density Estimation (KDE), the standard technique in crime hotspot mapping (Chainey, Tompson and Uhlig, 2008). 125m was chosen deliberately; it matches our own estimate of how far apart data.police.uk's anonymised points are in Camden (see Location Anonymisation above), so it's roughly the smallest radius that reliably spans that uncertainty. Columns: `crime_density_r{R}` / `stop_search_density_r{R}` (weighted count), and `severity_wavg_r{R}` / `perceived_risk_wavg_r{R}` (distance-weighted average) for each radius.
 
 ## Lamp Features Kept Separate
 
@@ -112,5 +112,3 @@ OpenStreetMap contributors (2026) OpenStreetMap. Available at: https://www.opens
 Sherman, L., Neyroud, P. and Neyroud, E. (2016) 'The Cambridge Crime Harm Index: measuring total harm from crime based on sentencing guidelines', Policing: A Journal of Policy and Practice, 10(3), pp. 171–183.
 
 Single Online Home National Digital Team (2026) About data.police.uk. Available at: https://data.police.uk/about/ (Accessed: 17 July 2026).
-
-Tobler, W. (1970) 'A computer movie simulating urban growth in the Detroit region', Economic Geography, 46(sup1), pp. 234–240.
