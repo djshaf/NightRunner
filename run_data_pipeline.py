@@ -15,16 +15,31 @@ What this script does, end to end:
      systems).
   6. Snaps crime, stop and search, and lamp points onto the nearest street
      edge, then builds TWO separate edge level feature tables:
-       - edge_features.csv/.gpkg: crime + stop and search features, as an
-         overall total across the whole resolved date range, broken out
-         per month as separate columns, AND with a spatial lag: for each
-         edge, the total crime/severity/perceived-risk/stop-search of its
-         directly neighbouring edges (edges sharing a junction node).
+       - edge_features.csv/.gpkg: crime + stop and search features. Two
+         different methods are included side by side, not one replacing
+         the other:
+           (a) nearest-edge counts: each crime/stop-search snapped to its
+               SINGLE closest street, summed as an overall total, split out
+               per month, and spatially lagged to neighbouring streets.
+           (b) radius-weighted "surroundings" density: for four radii
+               (50m/75m/125m/150m), every crime within that radius of a
+               street contributes to it, weighted down the further away it
+               is, so a crime doesn't just "belong" to one nearest street,
+               it contributes partially to every nearby street too. This is
+               closer to how a person would actually assess "what's around
+               me", see the long comment above RADIUS_OPTIONS for why and
+               the academic basis for it.
+         Method (a) still feeds the monthly breakdown and the spatial lag,
+         method (b) is the new one requested to look at surroundings before
+         picking a route.
        - edge_lamp_features.csv/.gpkg: lamp features (lamp_count,
          lamp_per_km, is_lit), kept separate, lighting is a live snapshot
          with no time dimension, a different kind of feature entirely.
   7. Saves everything to disk (GeoPackage plus plain CSVs of both feature
-     tables).
+     tables). Both feature tables include the true OpenStreetMap way ID
+     (osmid) plus u/v node IDs and their WGS84 coordinates, so every row
+     can be traced back to an actual place on OpenStreetMap, not just an
+     internal edge_id.
 
 The data sources match the proposal Resources table:
   street network    -> OpenStreetMap (OSMnx)
@@ -46,20 +61,15 @@ Notes on data.police.uk, checked directly against their API docs and their
     is actually published and prints a note if it had to.
   - Location anonymisation: crime/stop-search coordinates are NOT the
     actual incident location. Each force's raw location is snapped to the
-    nearest point on a master list of ~680,000 anonymous map points
-    (mostly street centre points, plus parks, stations, etc), and every
+    nearest point on a master list of ~680,000 anonymous map points, each
     map point's catchment must contain at least 8 postal addresses (or
-    none at all, e.g. a park). This means points are NOT on a uniform
-    grid, spacing depends entirely on local street/address density. There
-    is no official average spacing figure published, but our own Camden
-    run gives a rough empirical estimate: an early debugging run that
-    accidentally deduplicated crime by coordinate collapsed roughly 24,400
-    crime records (6 months) down to about 1,384 distinct points. Camden
-    is about 21.8 sq km, so if you spread 1,384 points evenly across that
-    area you get one point roughly every ~125m. That is an upper bound on
-    average spacing (6 months of crime will not have hit every eligible
-    snap point in the borough), the true figure is probably somewhat
-    denser than that in busy areas and sparser in quiet residential ones.
+    none at all, e.g. a park). Points are NOT on a uniform grid. Our own
+    Camden run gives a rough empirical spacing estimate of ~125m (see
+    README). This is exactly why RADIUS_OPTIONS starts at 50m and goes up
+    to 150m: the underlying location data itself is only accurate to
+    roughly that scale, so a single nearest-street snap can be misleading,
+    a radius wide enough to span the anonymisation grid is more honest
+    about the uncertainty.
 
 Run this on a machine with normal internet access. It needs to reach
 overpass-api.de (OSMnx), data.police.uk and opendata.camden.gov.uk.
@@ -81,6 +91,7 @@ import geopandas as gpd
 import osmnx as ox
 import pandas as pd
 import requests
+import shapely
 from shapely.geometry import Point, shape
 
 
@@ -109,9 +120,38 @@ NETWORK_TYPE = "walk"
 CAMDEN_LIGHTING_URL = "https://opendata.camden.gov.uk/resource/dfq3-8wzu.json"
 
 # --------------------------------------------------------------------------
-# TWO separate crime weightings, on purpose, not one.
+# RADIUS-WEIGHTED "SURROUNDINGS" DENSITY
 #
-# CRIME_SEVERITY = actual harm, informed by:
+# Instead of snapping each crime to only its single nearest street, this
+# looks at everything within a chosen radius of a street and blends it in,
+# weighted down the further away it is (a linear/triangular decay: a crime
+# right on top of the street counts fully, a crime right at the edge of the
+# radius counts almost nothing, weight = 0 beyond the radius). This is a
+# simplified version of Kernel Density Estimation (KDE), the standard
+# technique in crime hotspot mapping:
+#   Chainey, S., Tompson, L. and Uhlig, S. (2008) 'The utility of hotspot
+#   mapping for predicting spatial patterns of crime', Security Journal,
+#   21(1-2), pp.4-28. KDE aggregates crime within a user-specified search
+#   radius into a continuous density surface, and was found to consistently
+#   outperform simpler hotspot mapping techniques.
+# The general principle that nearby things should be weighted more heavily
+# than distant things is Tobler's First Law of Geography:
+#   Tobler, W. (1970) 'A computer movie simulating urban growth in the
+#   Detroit region', Economic Geography, 46(sup1), pp.234-240.
+#
+# Four radii are calculated side by side (50m, 75m, 125m, 150m) rather than
+# picking one, so the choice of "how far around you look" is left to
+# whoever builds the routing model on top of this, not baked in here. 125m
+# specifically matches our own estimate of how far apart data.police.uk's
+# anonymised crime points typically are in Camden (see README), so it is
+# roughly the smallest radius that reliably spans the location uncertainty
+# already built into the source data.
+# --------------------------------------------------------------------------
+RADIUS_OPTIONS = [50, 75, 125, 150]
+
+# Our own coarse severity tiering of data.police.uk's 14 crime categories.
+# The API itself has no seriousness/grade field, so this is informed by two
+# published sources rather than invented from scratch:
 #   1. Sherman, L., Neyroud, P. and Neyroud, E. (2016) 'The Cambridge Crime
 #      Harm Index: Measuring Total Harm From Crime Based On Sentencing
 #      Guidelines', Policing: A Journal of Policy and Practice, 10(3),
@@ -122,28 +162,16 @@ CAMDEN_LIGHTING_URL = "https://opendata.camden.gov.uk/resource/dfq3-8wzu.json"
 #      weights, published on ons.gov.uk.
 #
 # CRIME_PERCEIVED_RISK = how unsafe it makes an area FEEL to someone
-# passing through, which is not the same thing, and is the whole point of
-# this second column. Informed by:
+# passing through, which is not the same thing. Informed by:
 #   3. Innes, M. (2004) 'Signal crimes and signal disorders: notes on
 #      deviance as communicative action', The British Journal of Sociology,
 #      55(3), pp.335-355. Also Innes, M. and Fielding, N. (2002) 'From
 #      Community to Communicative Policing: Signal Crimes and the Problem
-#      of Public Reassurance', Sociological Research Online, 7(2). The
-#      Signal Crimes Perspective: certain visible crimes and disorder act
-#      as "warning signals" about risk and disproportionately drive fear of
-#      crime, independent of their statistical severity. Anti-social
-#      behaviour is their headline example, exactly the case raised in
-#      discussion.
+#      of Public Reassurance', Sociological Research Online, 7(2).
 #   4. Office for National Statistics, Crime Survey for England and Wales
 #      (CSEW), 'perception and Anti-Social Behaviour (ASB) by Police Force
-#      Area' releases. Measures the public's actual worry about crime and
-#      perceived ASB levels by area, i.e. real survey evidence that
-#      perceived safety and recorded severity diverge.
+#      Area' releases.
 #
-# CRIME_PERCEIVED_RISK is deliberately spaced 1 to 4, not 1 to 3, both to
-# leave more room between tiers and because that is the more defensible
-# split once ASB/disorder is pulled out as its own signal tier rather than
-# being lumped in at the bottom with shoplifting.
 # Neither list is a precise reproduction of the cited studies' exact
 # numbers, that would need the ~200 individual offence codes those studies
 # use, not the 14 broad categories police.uk exposes. Both are a coarse,
@@ -217,9 +245,13 @@ def get_network(place: str, network_type: str):
     """Download the street graph and return (boundary_polygon, edges_gdf).
 
     edges_gdf is projected to METRIC_CRS and carries a stable 'edge_id' so we
-    can attach features to each street segment later. u_lat/u_lng and
-    v_lat/v_lng give the WGS84 (plain GPS) coordinates of each edge's two
-    endpoint nodes, sitting right next to u and v.
+    can attach features to each street segment later. Also kept:
+      - osmid: the TRUE OpenStreetMap way ID for this street (converted to
+        a comma-joined string if OSMnx merged several OSM ways into one
+        edge, since a raw Python list can't be written to CSV/GeoPackage).
+      - u_lat/u_lng and v_lat/v_lng: WGS84 (plain GPS) coordinates of each
+        edge's two endpoint nodes, sitting right next to u and v, since u
+        and v on their own are just OpenStreetMap's internal node IDs.
 
     NOTE: 'lit' is an OSM tag only present on edges where someone actually
     mapped it. If NO edge in the whole download has that tag (true for
@@ -240,6 +272,11 @@ def get_network(place: str, network_type: str):
     edges = ox.graph_to_gdfs(graph, nodes=False, edges=True).reset_index()
     edges["edge_id"] = edges.index.astype(int)
 
+    if "osmid" in edges.columns:
+        edges["osmid"] = edges["osmid"].apply(
+            lambda v: ",".join(str(x) for x in v) if isinstance(v, (list, tuple)) else str(v)
+        )
+
     edges = edges.merge(
         node_lookup.rename(columns={"lat": "u_lat", "lng": "u_lng"}),
         left_on="u", right_index=True, how="left",
@@ -249,7 +286,7 @@ def get_network(place: str, network_type: str):
         left_on="v", right_index=True, how="left",
     )
 
-    keep = [c for c in ["edge_id", "u", "u_lat", "u_lng", "v", "v_lat", "v_lng",
+    keep = [c for c in ["edge_id", "osmid", "u", "u_lat", "u_lng", "v", "v_lat", "v_lng",
                         "key", "name", "highway", "length", "lit", "geometry"]
             if c in edges.columns]
     edges = edges[keep].copy()
@@ -485,8 +522,10 @@ def _points_to_gdf(df: pd.DataFrame, lat_col: str, lng_col: str) -> gpd.GeoDataF
 def snap_counts(points: gpd.GeoDataFrame, edges: gpd.GeoDataFrame,
                 max_dist: float, out_name: str,
                 weight_col: str | None = None) -> pd.Series:
-    """Match each point to its nearest street edge. Counts by default, or
-    sums weight_col per edge if given (used for severity/perceived-risk)."""
+    """Nearest-edge method: match each point to its SINGLE nearest street
+    edge. Counts by default, or sums weight_col per edge if given (used for
+    severity/perceived-risk). This is method (a), see the module docstring;
+    still used for the monthly breakdown and the spatial lag."""
     if points.empty:
         return pd.Series(0, index=edges["edge_id"], name=out_name)
 
@@ -526,26 +565,73 @@ def snap_counts_by_month(points: gpd.GeoDataFrame, edges: gpd.GeoDataFrame,
     return pd.DataFrame(cols)
 
 
+def radius_weighted_features(points: gpd.GeoDataFrame, edges: gpd.GeoDataFrame,
+                             radii: list[int], out_prefix: str,
+                             value_cols: list[str] | None = None) -> pd.DataFrame:
+    """Method (b), see the module docstring: for each radius in `radii`,
+    every point within that radius of a street contributes to it, weighted
+    down linearly to zero at the radius edge (weight = 1 - distance/radius).
+    This is a simplified Kernel Density Estimation (KDE), see the long
+    comment above RADIUS_OPTIONS for the academic basis.
+
+    For each radius R, produces:
+      - {out_prefix}_density_r{R}: the weighted COUNT of points within R
+        (a KDE-style intensity, not a plain count, closer points count for
+        more than one, further ones for less than one)
+      - {col}_wavg_r{R} for each column in value_cols: the distance-weighted
+        AVERAGE of that column across points within R (0 if none)
+
+    Returns a DataFrame indexed by edge_id, covering every edge (0-filled
+    where nothing is nearby).
+    """
+    if value_cols is None:
+        value_cols = []
+    result = pd.DataFrame(index=pd.Index(edges["edge_id"], name="edge_id"))
+
+    if points.empty:
+        for R in radii:
+            result[f"{out_prefix}_density_r{R}"] = 0.0
+            for col in value_cols:
+                result[f"{col}_wavg_r{R}"] = 0.0
+        return result
+
+    edges_small = edges[["edge_id", "geometry"]]
+    edge_geom_lookup = edges_small.set_index("edge_id").geometry
+
+    for R in radii:
+        joined = gpd.sjoin(points, edges_small, predicate="dwithin", distance=R, how="inner")
+        if joined.empty:
+            result[f"{out_prefix}_density_r{R}"] = 0.0
+            for col in value_cols:
+                result[f"{col}_wavg_r{R}"] = 0.0
+            continue
+
+        matched_edge_geom = joined["edge_id"].map(edge_geom_lookup).values
+        dist = shapely.distance(joined.geometry.values, matched_edge_geom)
+        weight = (1 - dist / R).clip(min=0)
+        joined = joined.assign(_weight=weight)
+
+        density = joined.groupby("edge_id")["_weight"].sum()
+        density = density.reindex(edges["edge_id"], fill_value=0.0)
+        result[f"{out_prefix}_density_r{R}"] = density.values
+
+        for col in value_cols:
+            wv = joined["_weight"] * joined[col]
+            num = wv.groupby(joined["edge_id"]).sum()
+            den = joined.groupby("edge_id")["_weight"].sum()
+            wavg = (num / den.replace(0, pd.NA)).fillna(0.0)
+            wavg = wavg.reindex(edges["edge_id"], fill_value=0.0)
+            result[f"{col}_wavg_r{R}"] = wavg.values
+
+    return result
+
+
 def add_spatial_lag(features: pd.DataFrame, edges: gpd.GeoDataFrame,
                     cols: list[str]) -> pd.DataFrame:
     """Spatial lag: for each edge, the total of `cols` on its directly
     neighbouring edges, where "neighbouring" means sharing a junction node
-    (u or v) with it. This is the street-network equivalent of a queen/rook
-    contiguity spatial lag used in spatial statistics (e.g. Moran's I style
-    neighbour weighting), just adapted to a graph instead of a grid, since a
-    street network is not a grid.
-
-    Deliberately applied only to the OVERALL total columns
-    (crime_count, crime_severity_sum, crime_perceived_risk_sum,
-    stop_search_count), not the per-month columns, that would multiply an
-    already wide table by another ~35 columns for not much modelling
-    benefit. Easy to extend to specific month columns later by passing them
-    in `cols` if the model actually needs it.
-
-    Adds two columns per input column: <col>_lag_sum (total across
-    neighbouring edges) and <col>_lag_mean (average across neighbouring
-    edges, useful since dead-end edges only have 1 neighbour and a busy
-    junction might have 5).
+    (u or v) with it. Adds <col>_lag_sum and <col>_lag_mean for each col,
+    applied only to the overall totals to keep the column count sane.
     """
     node_edges = defaultdict(set)
     for eid, u, v in zip(edges["edge_id"], edges["u"], edges["v"]):
@@ -583,10 +669,13 @@ def build_crime_stop_features(edges: gpd.GeoDataFrame, crime: gpd.GeoDataFrame,
     """Crime and stop-search features only, NOT lamps (see build_lamp_features).
 
     Produces, per edge:
-      - overall totals across the full resolved date range: crime_count,
-        crime_severity_sum, crime_perceived_risk_sum, stop_search_count
+      - nearest-edge overall totals across the full resolved date range:
+        crime_count, crime_severity_sum, crime_perceived_risk_sum,
+        stop_search_count
       - a per-month breakdown of the same, as separate columns
       - a spatial lag of the overall totals (see add_spatial_lag)
+      - radius-weighted "surroundings" density and weighted averages at
+        50/75/125/150m (see radius_weighted_features)
     """
     crime_count = snap_counts(crime, edges, CRIME_SNAP_MAX_M, "crime_count")
     crime_severity_sum = snap_counts(crime, edges, CRIME_SNAP_MAX_M,
@@ -619,18 +708,29 @@ def build_crime_stop_features(edges: gpd.GeoDataFrame, crime: gpd.GeoDataFrame,
     length_km = (out["length"] / 1000.0).clip(lower=1e-6)
     out["crime_per_km"] = out["crime_count"] / length_km
     out["crime_severity_per_km"] = out["crime_severity_sum"] / length_km
-    out["crime_avg_severity"] = (out["crime_severity_sum"]
-                                 / out["crime_count"].replace(0, pd.NA)).fillna(0.0).astype(float)
+    crime_count_or_nan = out["crime_count"].where(out["crime_count"] != 0)
+    out["crime_avg_severity"] = (out["crime_severity_sum"] / crime_count_or_nan).fillna(0.0).astype(float)
     out["crime_perceived_risk_per_km"] = out["crime_perceived_risk_sum"] / length_km
-    out["crime_avg_perceived_risk"] = (out["crime_perceived_risk_sum"]
-                                       / out["crime_count"].replace(0, pd.NA)).fillna(0.0).astype(float)
+    out["crime_avg_perceived_risk"] = (out["crime_perceived_risk_sum"] / crime_count_or_nan).fillna(0.0).astype(float)
     out["stop_search_per_km"] = out["stop_search_count"] / length_km
 
     lag_cols = ["crime_count", "crime_severity_sum", "crime_perceived_risk_sum", "stop_search_count"]
     out = add_spatial_lag(out, edges, lag_cols)
 
+    crime_radius = radius_weighted_features(
+        crime, edges, RADIUS_OPTIONS, out_prefix="crime",
+        value_cols=["severity", "perceived_risk"],
+    )
+    stop_radius = radius_weighted_features(
+        stops, edges, RADIUS_OPTIONS, out_prefix="stop_search",
+        value_cols=[],
+    )
+    out = out.merge(crime_radius, left_on="edge_id", right_index=True, how="left")
+    out = out.merge(stop_radius, left_on="edge_id", right_index=True, how="left")
+
     out.attrs["monthly_columns"] = monthly_cols
     out.attrs["lag_columns"] = [f"{c}_lag_sum" for c in lag_cols] + [f"{c}_lag_mean" for c in lag_cols]
+    out.attrs["radius_columns"] = list(crime_radius.columns) + list(stop_radius.columns)
     return out
 
 
@@ -639,14 +739,18 @@ def build_lamp_features(edges: gpd.GeoDataFrame, lamps: gpd.GeoDataFrame) -> gpd
     get_network about 'lit' sometimes not existing at all."""
     lamp_count = snap_counts(lamps, edges, LAMP_SNAP_MAX_M, "lamp_count")
 
-    keep_cols = [c for c in ["edge_id", "length", "lit", "geometry"] if c in edges.columns]
+    keep_cols = [c for c in ["edge_id", "osmid", "u", "v", "length", "lit", "geometry"]
+                if c in edges.columns]
     out = edges[keep_cols].merge(lamp_count, on="edge_id")
 
     length_km = (out["length"] / 1000.0).clip(lower=1e-6)
     out["lamp_per_km"] = out["lamp_count"] / length_km
     osm_lit = out["lit"].astype(str).str.lower().eq("yes") if "lit" in out else False
     out["is_lit"] = (osm_lit | (out["lamp_count"] > 0)).astype(int)
-    return out[["edge_id", "lamp_count", "lamp_per_km", "is_lit", "geometry"]]
+
+    final_cols = [c for c in ["edge_id", "osmid", "u", "v", "lamp_count", "lamp_per_km",
+                              "is_lit", "geometry"] if c in out.columns]
+    return out[final_cols]
 
 
 # --------------------------------------------------------------------------
@@ -702,6 +806,7 @@ def main():
 
     monthly_cols = crime_features.attrs.get("monthly_columns", [])
     lag_cols = crime_features.attrs.get("lag_columns", [])
+    radius_cols = crime_features.attrs.get("radius_columns", [])
     print(f"\n[summary] {len(crime_features)} edges")
     print(f"[summary] totals summed across ALL resolved months "
           f"({months[0]} to {months[-1]}, {len(months)} months):")
@@ -710,11 +815,11 @@ def main():
     print(f"  crime_perceived_risk_sum    = {int(crime_features['crime_perceived_risk_sum'].sum())}")
     print(f"  stop_search total           = {int(crime_features['stop_search_count'].sum())}")
     print(f"  lamp_count total            = {int(lamp_features['lamp_count'].sum())}")
-    print(f"[summary] {len(monthly_cols)} monthly breakdown columns, e.g.:")
-    for c in (monthly_cols[:3] + (["..."] if len(monthly_cols) > 6 else []) + monthly_cols[-3:]):
-        print(f"    {c}")
-    print(f"[summary] {len(lag_cols)} spatial lag columns added:")
-    for c in lag_cols:
+    print(f"[summary] {len(monthly_cols)} monthly breakdown columns")
+    print(f"[summary] {len(lag_cols)} spatial lag columns")
+    print(f"[summary] {len(radius_cols)} radius-weighted surroundings columns "
+          f"(radii: {RADIUS_OPTIONS}), e.g.:")
+    for c in radius_cols[:6]:
         print(f"    {c}")
 
 
