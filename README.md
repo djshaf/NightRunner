@@ -38,13 +38,13 @@ Type, object of search, outcome, and datetime are kept. Gender, age range, and e
 
 ## Spatial Lag (Neighbouring Streets)
 
-`<col>_lag_sum` / `<col>_lag_mean` give the total/average of that column across directly neighbouring edges (edges sharing a junction node), applied to the four overall totals only. **Naming clash to be aware of:** this is a spatial lag (nearby streets, same month). The ML/NN pipeline section below also uses "lag" (e.g. `crime_count_lag_1`) for a temporal lag (same street, previous months). Same word, different axis, do not treat them as the same column.
+<col>_lag_sum / <col>_lag_mean give the total and average of that column across an edge's directly neighbouring edges (edges sharing a junction node), computed for the four overall totals only. This is a spatial lag: it aggregates over nearby streets within the same month. It is distinct from the temporal lag used in the ML/NN pipeline section below (e.g. crime_count_lag_1), which aggregates over previous months for the same street. Both use the term "lag", but along different axes, spatial versus temporal, and should not be treated as the same type of column.
 
 ## Network KDE (NetKDE) Smoothing
 
 The nearest-edge counts above snap each crime to one single street. That is a hard, all-or-nothing choice, so `edge_features.csv` also spreads each crime out over nearby streets using Network KDE (NetKDE). Close crimes count for more, but distance is measured along the walkable street graph using Dijkstra shortest paths, not in a straight line, so a crime spreads down real streets a runner could actually take, not through a wall, a back garden or across the canal. This is a simplified Kernel Density Estimation (KDE), the standard technique in crime hotspot mapping (Chainey, Tompson and Uhlig, 2008), adapted to use network distance instead of straight-line distance.
 
-It is applied separately inside each month, so no future month can leak backwards; pooling all months first would let a crime from 2026 bleed into a street's 2023 figures and leak the future into the past. The columns are named `{metric}_netkde_{year}_{month}`, e.g. `crime_count_netkde_2024_01`, matching the monthly breakdown naming so the downstream wide-to-long reshape picks them up automatically. Bandwidth defaults to 125m, matching our own estimate of how far apart data.police.uk's anonymised points sit in Camden (see Location Anonymisation above); change `NETKDE_BANDWIDTH_M` in the script to adjust it. This smoothing was moved upstream into the data pipeline (from the ML notebook) so it runs once here, and so the street graph is built once rather than rebuilt forevery month.
+It is applied separately inside each month, so no future month can leak backwards; pooling all months first would let a crime from 2026 bleed into a street's 2023 figures and leak the future into the past. The columns are named `{metric}_netkde_{year}_{month}`, e.g. `crime_count_netkde_2024_01`, matching the monthly breakdown naming so the downstream wide-to-long reshape picks them up automatically. Bandwidth defaults to 125m, matching our own estimate of how far apart data.police.uk's anonymised points sit in Camden (see Location Anonymisation above); change `NETKDE_BANDWIDTH_M` in the script to adjust it.
 
 ## Lamp Features Kept Separate
 
@@ -57,10 +57,6 @@ Records with missing coordinates are removed. Coordinate fields are converted to
 ## Street Network References
 
 `osmid` is the true OpenStreetMap way ID for that street (comma-joined if OSMnx merged several OSM ways into one edge), so any row can be looked up directly on openstreetmap.org. u and v are OpenStreetMap's internal node IDs, not human-readable on their own. u_lat, u_lng, v_lat, v_lng sit immediately to their right, giving each endpoint's plain WGS84 coordinates. All four (`osmid`, `u`, `v`, plus the lat/lng pairs) are included in both `edge_features` and `edge_lamp_features`.
-
-## Street Network References
-
-u and v are OpenStreetMap's internal node IDs, not human-readable. u_lat, u_lng, v_lat, v_lng sit immediately to their right, giving each endpoint's plain WGS84 coordinates.
 
 ## Outputs
 
