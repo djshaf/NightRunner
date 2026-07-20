@@ -1,0 +1,8 @@
+.DS_Store
+__pycache__/
+*.pyc
+valhalla_data/valhalla_tiles/
+valhalla_data/valhalla_tiles.tar
+valhalla_data/admins.sqlite
+valhalla_data/default_speeds.json
+valhalla_data/file_hashes.txt

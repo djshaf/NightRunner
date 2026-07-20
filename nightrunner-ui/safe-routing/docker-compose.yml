@@ -1,0 +1,72 @@
+services:
+  # ---------------------------------------------------------------------
+  # 1) The Valhalla routing engine itself.
+  #    Uses the official "scripted" image, which builds graph tiles from
+  #    whatever OSM .pbf file(s) you drop in ./valhalla_data on first boot,
+  #    then serves the HTTP API on port 8002.
+  #    Docs: https://github.com/valhalla/valhalla/blob/master/docker/README.md
+  # ---------------------------------------------------------------------
+  valhalla:
+    image: ghcr.io/valhalla/valhalla-scripted:latest
+    container_name: valhalla
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./valhalla_data:/custom_files
+    environment:
+      # Nothing needed here to point at your .pbf file - just put it
+      # directly in ./valhalla_data/ (any filename, e.g. camden.osm.pbf)
+      # and the container finds it automatically on startup/restart.
+      - serve_tiles=True
+      - build_admins=True
+      - build_time_zones=False
+      - build_elevation=False   # set True if your safety model needs elevation/grade
+      - build_tar=True
+      - use_tiles_ignore_pbf=True   # skip rebuilding tiles once they exist already
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------
+  # 2) Your safety-reranking proxy (Option A).
+  #    Sits between the web-app and Valhalla: asks Valhalla for alternate
+  #    pedestrian routes, scores each with your ML model, returns the
+  #    safest one dressed up as a normal Valhalla /route response.
+  # ---------------------------------------------------------------------
+  reranker:
+    build: ./reranker
+    container_name: safety_reranker
+    ports:
+      - "5050:5000"
+    volumes:
+      - ./reranker:/app
+    environment:
+      - VALHALLA_URL=http://valhalla:8002
+      - NUM_ALTERNATES=3
+    depends_on:
+      - valhalla
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------
+  # 3) The Valhalla demo web-app (React/Vite), pointed at the reranker
+  #    instead of directly at Valhalla, so it transparently gets back
+  #    safety-reranked routes.
+  #    Assumes you've cloned https://github.com/valhalla/web-app as a
+  #    sibling directory: ../web-app
+  # ---------------------------------------------------------------------
+  web-app:
+    build:
+      context: ../web-app
+    container_name: web_app
+    ports:
+      - "3000:80"
+    environment:
+      - SKIP_PREFLIGHT_CHECK=true
+      - VITE_VALHALLA_URL=http://localhost:5050
+      - VITE_NOMINATIM_URL=https://nominatim.openstreetmap.org
+      - VITE_TILE_SERVER_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png
+      # Centre coordinate computed from your actual edge_features.csv data
+      - VITE_CENTER_COORDS=51.539,-0.146
+      - VITE_DEFAULT_COSTING_MODEL=pedestrian
+      - VITE_CLIENT_ID=safe-routes-qmul
+    depends_on:
+      - reranker
+    restart: unless-stopped

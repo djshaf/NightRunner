@@ -1,0 +1,47 @@
+name: Build Windows installer (.exe)
+
+# Builds NightRunnerSetup.exe on GitHub's own Windows machines - you don't
+# need a Windows computer yourself for this to work.
+#
+# Runs automatically whenever you push a version tag (e.g. `git tag v1.0
+# && git push --tags`), which also attaches the .exe to a GitHub Release.
+# You can also trigger it manually from the Actions tab any time, which
+# just gives you a downloadable build without creating a release.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build NightRunnerSetup.exe
+        run: pyinstaller --onefile --console --name NightRunnerSetup nightrunner-ui/setup.py
+
+      - name: Upload build as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NightRunnerSetup-windows
+          path: dist/NightRunnerSetup.exe
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/NightRunnerSetup.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

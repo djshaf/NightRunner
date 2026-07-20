@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Safety-scored edges</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+  <style>
+    html, body { height: 100%; width: 100%; margin: 0; padding: 0; }
+    #map { position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
+    #status {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      z-index: 9999; background: white; padding: 8px 14px; border-radius: 6px;
+      font-family: sans-serif; font-size: 13px; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+    .legend {
+      background: white; padding: 8px 12px; border-radius: 6px;
+      font-family: sans-serif; font-size: 13px; line-height: 1.5;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+    .legend div { display: flex; align-items: center; gap: 6px; }
+    .swatch { width: 14px; height: 4px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <div id="status">Loading map...</div>
+  <div id="map"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+  <script>
+    const statusEl = document.getElementById('status');
+
+    if (typeof L === 'undefined') {
+      statusEl.textContent = 'ERROR: Leaflet failed to load from CDN. Check your internet connection or try disabling ad-blockers for this page.';
+    } else {
+      statusEl.textContent = 'Leaflet loaded. Fetching safety_edges.geojson...';
+
+      // preferCanvas is the single biggest performance lever here: with
+      // ~22,000 edges, Leaflet's default SVG renderer creates one DOM
+      // element per shape (tens of thousands of them), which is what
+      // freezes the tab. Canvas draws everything onto one <canvas>
+      // element instead - dramatically faster at this scale.
+      const map = L.map('map', { preferCanvas: true });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      map.setView([51.539, -0.146], 13); // provisional centre, refit once data loads
+
+      function haversineM(lat1, lon1, lat2, lon2) {
+        const R = 6371000;
+        const toRad = d => d * Math.PI / 180;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+        return 2 * R * Math.asin(Math.sqrt(a));
+      }
+
+      fetch('safety_edges.geojson')
+        .then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status} fetching safety_edges.geojson`);
+          return r.json();
+        })
+        .then(data => {
+          statusEl.textContent = `Loaded ${data.features.length} risky edges. Rendering...`;
+
+          // Dropped the separate white halo layer from the previous version -
+          // it doubled the shape count for a purely cosmetic effect, which
+          // isn't worth it at this scale. The coloured lines alone still
+          // read clearly against the basemap.
+          const edgeFeatures = data.features.filter(f => f.properties.feature_role === 'edge');
+
+          const layer = L.geoJSON({ type: 'FeatureCollection', features: edgeFeatures }, {
+            style: feature => ({
+              color: feature.properties.color,
+              weight: 5,
+              opacity: 1,
+            }),
+          }).addTo(map);
+
+          // Single shared popup bound via one delegated click handler,
+          // rather than binding ~22,000 individual popups up front - much
+          // cheaper to set up, identical result for the user.
+          layer.on('click', (e) => {
+            const p = e.layer.feature.properties;
+            L.popup()
+              .setLatLng(e.latlng)
+              .setContent(`osmid: ${p.osmid}<br>safety_tag_value: ${p.safety_tag_value}<br>cost factor: ${p.cost_factor}`)
+              .openOn(map);
+          });
+
+          // Midpoint markers only for genuinely short edges (under 15m),
+          // where the line itself can be hard to see at normal zoom.
+          // Most edges are normal street lengths and don't need one -
+          // adding markers to all ~22,000 was the other major cost here.
+          const shortEdges = edgeFeatures.filter(f => {
+            const c = f.geometry.coordinates;
+            if (c.length < 2) return false;
+            const [lon1, lat1] = c[0];
+            const [lon2, lat2] = c[c.length - 1];
+            return haversineM(lat1, lon1, lat2, lon2) < 15;
+          });
+
+          shortEdges.forEach(feature => {
+            const coords = feature.geometry.coordinates;
+            const mid = coords[Math.floor(coords.length / 2)];
+            const tag = feature.properties.safety_tag_value;
+            L.circleMarker([mid[1], mid[0]], {
+              radius: 5 + tag,
+              color: '#000000',
+              weight: 1,
+              fillColor: feature.properties.color,
+              fillOpacity: 0.85,
+            })
+              .bindPopup(`osmid: ${feature.properties.osmid}<br>safety_tag_value: ${tag}<br>cost factor: ${feature.properties.cost_factor}`)
+              .addTo(map);
+          });
+
+          statusEl.textContent = `Rendered ${edgeFeatures.length} edges (${shortEdges.length} with markers).`;
+          setTimeout(() => statusEl.remove(), 2500);
+
+          if (layer.getBounds().isValid()) {
+            map.fitBounds(layer.getBounds(), { padding: [20, 20] });
+          }
+        })
+        .catch(err => {
+          statusEl.textContent = 'ERROR: ' + err.message +
+            ' - make sure safety_edges.geojson is in the same folder as this HTML file, ' +
+            'and that you generated it with build_safety_geojson.py.';
+          console.error(err);
+        });
+
+      const legend = L.control({ position: 'bottomright' });
+      legend.onAdd = function () {
+        const div = L.DomUtil.create('div', 'legend');
+        div.innerHTML = '<strong>Risk tier (safety_tag_value)</strong><br>' +
+          [[2,'#FFD580'],[4,'#FF9900'],[6,'#FF3300'],[8,'#CC0000'],[11,'#660000']]
+            .map(([tag, color]) => `<div><span class="swatch" style="background:${color}"></span> tag ${tag}</div>`)
+            .join('');
+        return div;
+      };
+      legend.addTo(map);
+    }
+  </script>
+</body>
+</html>
