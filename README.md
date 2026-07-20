@@ -89,6 +89,28 @@ To forecast an unknown future month, the latest available month's actual data is
 ## Outputs
 One file in the output directory: osm_safety_tags.csv. This contains only the edge_id and the safety_tag_value, providing a clean mapping table to inject custom penalty tags (e.g., safety_cost=8) into the raw .osm.pbf map file before building the Valhalla routing graph. Node-level aggregations are excluded as Valhalla requires continuous edge penalties to prevent routing down the length of dangerous streets.
 
+# Running the UI (nightrunner-ui)
+
+A safety- and lighting-aware pedestrian routing tool built on [Valhalla](https://github.com/valhalla/valhalla) for Camden, in the `nightrunner-ui/` folder.
+
+## Requirement
+
+Docker Desktop must be installed and running first: https://www.docker.com/products/docker-desktop/. Everything else (Python, Node) runs inside it automatically - nothing else to install.
+
+## Setup
+
+**Mac:** double-click `nightrunner-ui/setup.command`. First time, macOS will block it as from an "unidentified developer" - right-click it, choose Open, then Open again in the dialog. Only needed once.
+
+**Windows:** download `NightRunnerSetup.exe` from the Releases page and double-click it (no Python needed). First time, Windows may warn "Windows protected your PC" (SmartScreen) - click More info, then Run anyway. Alternatively, double-click `nightrunner-ui/setup.bat` if Python is already installed.
+
+The script checks Docker, builds and starts everything, then opens http://localhost:3000 automatically. Safe to re-run any time.
+
+## If it doesn't work
+
+Make sure Docker Desktop is actually open and ready, and check nothing else is using ports 3000, 5050, or 8002. For anything else, run `docker compose logs` inside `nightrunner-ui/safe-routing`.
+
+---
+
 ## References:
 
 Boeing, G. (2017) 'OSMnx: new methods for acquiring, constructing, analyzing, and visualizing complex street networks', Computers, Environment and Urban Systems, 65, pp. 126–139.
@@ -110,3 +132,7 @@ OpenStreetMap contributors (2026) OpenStreetMap. Available at: https://www.opens
 Sherman, L., Neyroud, P. and Neyroud, E. (2016) 'The Cambridge Crime Harm Index: measuring total harm from crime based on sentencing guidelines', Policing: A Journal of Policy and Practice, 10(3), pp. 171–183.
 
 Single Online Home National Digital Team (2026) About data.police.uk. Available at: https://data.police.uk/about/ (Accessed: 17 July 2026).
+
+Valhalla contributors (2026) Valhalla. Available at: https://github.com/valhalla/valhalla (Accessed: 21 July 2026).
+
+Schneider, W. (2026) BBBike extracts. Available at: https://extract.bbbike.org (Accessed: 21 July 2026).
