@@ -22,7 +22,7 @@ Requests from January 2021 to June 2026. data.police.uk only keeps a rolling ~3 
 
 `crime_perceived_risk` is a separate new column (1 to 4), how unsafe a crime makes an area feel, not how harmful it legally is. Based on Innes (2004) 'Signal crimes and signal disorders', British Journal of Sociology, 55(3), and Innes and Fielding (2002), Sociological Research Online, 7(2): the Signal Crimes Perspective, visible disorder like anti-social behaviour disproportionately drives fear of crime independent of its statistical severity. Also informed by ONS Crime Survey for England and Wales (CSEW) perception/ASB releases. Under this column, anti-social behaviour (3) scores above burglary (2), the reverse of the severity ordering, deliberately.
 
-Both are coarse simplifications onto police.uk's 14 categories, not a reproduction of either study's exact weights; cite accordingly.
+Both are coarse simplifications onto police.uk's 14 categories, and should be cited as such rather than as a reproduction of either study's exact weights.
 
 ## Location Anonymisation and Average Spacing
 
@@ -42,13 +42,13 @@ Type, object of search, outcome, and datetime are kept. Gender, age range, and e
 
 ## Network KDE (NetKDE) Smoothing
 
-The nearest-edge counts above snap each crime to one single street. That is a hard, all-or-nothing choice, so `edge_features.csv` also spreads each crime out over nearby streets using Network KDE (NetKDE). Close crimes count for more, but distance is measured along the walkable street graph using Dijkstra shortest paths, not in a straight line, so a crime spreads down real streets a runner could actually take, not through a wall, a back garden or across the canal. This is a simplified Kernel Density Estimation (KDE), the standard technique in crime hotspot mapping (Chainey, Tompson and Uhlig, 2008), adapted to use network distance instead of straight-line distance.
+The nearest-edge counts above assign each crime to a single street. `edge_features.csv` also distributes each crime's weight across nearby streets using Network KDE (NetKDE). Closer crimes contribute more, and distance is measured along the walkable street graph using Dijkstra shortest paths rather than in a straight line, so a crime's influence spreads along streets a runner could actually take, not through a wall, a back garden or across the canal. This is a simplified Kernel Density Estimation (KDE), the standard technique in crime hotspot mapping (Chainey, Tompson and Uhlig, 2008), adapted here to use network distance instead of straight-line distance.
 
-It is applied separately inside each month, so no future month can leak backwards; pooling all months first would let a crime from 2026 bleed into a street's 2023 figures and leak the future into the past. The columns are named `{metric}_netkde_{year}_{month}`, e.g. `crime_count_netkde_2024_01`, matching the monthly breakdown naming so the downstream wide-to-long reshape picks them up automatically. Bandwidth defaults to 125m, matching our own estimate of how far apart data.police.uk's anonymised points sit in Camden (see Location Anonymisation above); change `NETKDE_BANDWIDTH_M` in the script to adjust it.
+The smoothing is applied separately within each month, so no future month can leak backwards into an earlier one; pooling all months together first would let a crime from 2026 bleed into a street's 2023 figures. The columns are named `{metric}_netkde_{year}_{month}`, e.g. `crime_count_netkde_2024_01`, matching the monthly breakdown naming so the downstream wide-to-long reshape picks them up automatically. Bandwidth defaults to 125m, matching the estimated spacing of data.police.uk's anonymised points in Camden (see Location Anonymisation above); this can be adjusted via `NETKDE_BANDWIDTH_M` in the script. The street graph is built once and reused for every month, rather than rebuilt separately for each one.
 
 ## Lamp Features Kept Separate
 
-Lamp features (`lamp_count`, `lamp_per_km`, `is_lit`) are no longer merged into `edge_features.csv`. They live in their own `edge_lamp_features.csv`/`.gpkg`, joinable back on `edge_id`. Note: no OSM edge in Camden carries a `lit` tag, so `is_lit` here depends entirely on whether a lamp snapped to that edge.
+Lamp features (\lamp_count`, `lamp_per_km`, `is_lit`) are kept in their own `edge_lamp_features.csv`/`.gpkg` file, separate from `edge_features.csv`, and can be joined back on `edge_id`. Note: no OSM edge in Camden carries a `lit` tag, so `is_lit` here depends entirely on whether a lamp snapped to that edge.
 
 ## Cleaning Procedure
 
