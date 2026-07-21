@@ -1,0 +1,17 @@
+# LaTeX build artifacts - regenerated every time you compile, so no need
+# to track them in git. Confirmed by an actual test compile of report.tex.
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# The compiled PDF itself - a GitHub Actions workflow builds this
+# automatically on every push and makes it downloadable, so there's no
+# need to commit it here too (and it'd just cause noisy diffs on every
+# edit). Remove this line if you'd rather commit the PDF directly instead.
+report.pdf

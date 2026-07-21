@@ -1,0 +1,33 @@
+name: Build report PDF
+
+# Compiles report/report.tex on GitHub's own servers whenever anything in
+# the report/ folder changes, so anyone on the team can grab a compiled
+# PDF without needing LaTeX installed locally themselves.
+#
+# Find the compiled PDF afterwards: go to the Actions tab, click the
+# latest "Build report PDF" run, and scroll down to "Artifacts".
+
+on:
+  push:
+    paths:
+      - "report-latex/**"
+  workflow_dispatch:
+
+jobs:
+  build_report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+
+      - name: Compile the report
+        uses: xu-cheng/latex-action@v4
+        with:
+          root_file: report.tex
+          working_directory: report-latex
+
+      - name: Upload the compiled PDF
+        uses: actions/upload-artifact@v6
+        with:
+          name: report-pdf
+          path: report-latex/report.pdf
