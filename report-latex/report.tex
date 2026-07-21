@@ -30,16 +30,19 @@
 
 
 %%%%%%%%% TITLE
-\title{\LaTeX\ Template for ECS7036P-AI in Applications Group Project Report (replace this line with your project title)}
+\title{\LaTeX\ ECS7036P - An AI Approach to Running Route Optimisation for Safety}
 
-\author{First Author\\
-{\tt\small first.author@qmul.ac.uk}
+\author{David Shafirovich\\
+200349804\\
+{\tt\small d.j.shafirovich@se25.qmul.ac.uk}
 \and
-Second Author\\
-{\tt\small second.author@qmul.ac.uk}
+Hongyuan Zhai\\
+260019183\\
+{\tt\small h.zhai@se25.qmul.ac.uk}
 \and
-Third Author\\
-{\tt\small third.author@qmul.ac.uk}
+Raena Fadzil\\
+250988321\\
+{\tt\small r.fadzil@se25.qmul.ac.uk}
 }
 
 
@@ -55,118 +58,114 @@ Third Author\\
 %%%%%%%%% ABSTRACT
 \begin{abstract}
    The abstract for your project goes here. The length of the abstract should be between 200-250 words. Tips for writing a good abstract can be found at \url{https://qmplus.qmul.ac.uk/mod/book/view.php?id=3310704&chapterid=323502}.
+   \textbf{<PLACEHOLDER - to be written last>}
 \end{abstract}
 
 %%%%%%%%% BODY TEXT
 \section{Introduction}
 
-This template is based on the CVPR conference template\footnote{\url{http://aicourse2026.thecvf.com/submission/main_conference/author_guidelines}}.
+Running participation in the UK has grown steadily in recent years, and events such as the London Marathon now attract record numbers of applicants. Running is one of the most accessible forms of exercise, requiring no gym membership or specialist equipment, and is widely recognised for its mental health benefits alongside its physical ones. Existing running and journey-planning apps, however, optimise almost exclusively for distance or time. Neither category of app treats personal safety as a crucial routing objective, despite safety being a commonly cited concern for solo runners, after dark or in unfamiliar cities.
 
-The information in this template is very minimal, and this file should serve you as a framework for writing your report. You may prefer to use a more collaboration-friendly tool while drafting the report with your classmates before you prepare the final report for submission. Remember that you should \textbf{submit both the report and code} you used for this project via Canvas. Also, \textbf{only one member per team} needs to submit the project material.
+This project addresses that gap by building a safety-first and street-lighting-aware pedestrian routing tool, scoped to the London Borough of Camden as a case study. The system attaches risk-related features derived from open crime, stop-and-search, and street lighting data to a street-level graph, trains a predictive model on that history, and injects the resulting risk estimates directly into a production-grade routing engine (Valhalla) so that riskier streets are naturally avoided where a reasonable alternative exists. A companion lighting indicator, based on current streetlight coverage rather than a trained prediction, is shown alongside each route for the user's own judgement, particularly relevant for evening use.
 
-
-This is an example of a mathematical equation:
-
-$$f(\mathbf{x}; \mathbf{w}) = \sum_{i=1}^{n} w_ix_i.$$
-
-This is a mathematical expression, $h(\mathbf{x}) = \hat{y}$ formatted in text. 
-
-The project report should be 6-8 pages long (excluding references)
-and should contain the sections that are already provided in this paper. Please read the text in these sections for further information.
-
-
-\subsection{Subsection}
-
-You can use paragraphs or subsections to further structure your
-main sections. This is an example of a subsection.
-
-\paragraph{This is a paragraph title.} This is an example of a paragraph.
+The remainder of this report describes prior work in safety-aware routing (Section 2), the data pipeline, predictive model, and routing integration that were actually built (Section 3), the datasets, software, and hardware involved (Section 4), the current state of evaluation together with an honest account of what remains outstanding against the project proposal (Section 5), and our conclusions and remaining contributions (Sections 6-8).
 
 \section{Related Work}
 
-Related work should be discussed here. This is an example of a citation \cite{mirjalili2018gender}. To format the citations properly, put the
-corresponding references into the bibliography.bib file. You can obtain
-BibTeX-formatted references for the "bib" file from Google Scholar 
-(\url{https://scholar.google.com}), for example, by clicking on the 
-double-quote character under a citation and then selecting \mbox{"BibTeX"} as
-shown in Figure \ref{fig:google-scholar-1col} and 
-Figure \ref{fig:google-scholar-2col}.
+A small but growing body of work treats safety as an explicit navigation objective rather than a secondary constraint. Atterkar et al.~\cite{atterkar2025womensafe} propose a Women Safe Route Navigation System that scores streets by risk and steers users away from higher-risk areas. Harideviprathap et al.~\cite{harideviprathap2026mogat} extend this with Mo-GAT, a multi-objective spatiotemporal graph attention network that predicts safety risk across a street network and adapts as conditions change over space and time. Anson~\cite{anson2025mlrouting} studies how a machine-learned weighting of a road network can be consumed by a path-finding algorithm in a smart urban transport setting, which is architecturally close to the approach this project ultimately takes. Tang et al.~\cite{tang2024itinera} pair spatial optimisation with large language models to plan open-ended urban itineraries, demonstrating that data-driven, objective-aware routing is achievable at city scale.
 
-\begin{figure}[t]
-\begin{center}
-   \includegraphics[width=0.8\linewidth]{figures/google-scholar.pdf}
-\end{center}
-   \caption{Example illustrating how to get BibTeX references from
-   Google Scholar as a 1-column figure.}
-\label{fig:google-scholar-1col}
-\end{figure}
-
-
-\begin{figure*}
-\begin{center}
-   \includegraphics[width=0.8\linewidth]{figures/google-scholar.pdf}
-\end{center}
-   \caption{Example illustrating how to get BibTeX references from
-   Google Scholar as a 2-column figure.}
-\label{fig:google-scholar-2col}
-\end{figure*}
-
-Table \ref{tab:some-table} shows an example for formatting a table.
-
-\begin{table}
-\begin{center}
-\begin{tabular}{|l|c|}
-\hline
-Method & Accuracy \\
-\hline\hline
-Method 1 & $70 \pm 3$ \% \\
- Method 2 & $76 \pm 3$ \% \\
-\hline
-\end{tabular}
-\end{center}
-\label{tab:some-table}
-\caption{This is an example of a table.}
-\end{table}
-
+These studies establish that safety-first, data-driven routing is both feasible and an active research area, but each targets either a specific demographic-focused safety application or a general urban commuting/itinerary-planning use case. None specifically targets the everyday runner, and none of the mainstream commercial running or journey-planning applications currently used by the public (Section 1) incorporate a safety objective at all. This project sits between these two spaces: applying a data-driven safety model, in the spirit of \cite{atterkar2025womensafe,harideviprathap2026mogat}, but integrated directly into a general-purpose, open-source routing engine rather than a bespoke path-finding implementation.
 
 \section{Proposed Method}
 
-Describe the method(s) you are proposing, developing, or using, i.e., details of the algorithms may be included here. 
+\subsection{Data Pipeline}
+
+\textbf{<PLACEHOLDER - Daniel to review/edit>}
+A routable pedestrian street graph for Camden is obtained from OpenStreetMap via OSMnx~\cite{boeing2017osmnx}. Three categories of open data are attached to this graph at street (edge) level: recorded crime and stop-and-search incidents from the UK Police open data API~\cite{datapoliceuk2026}, and street lighting locations from Camden Council's open data portal~\cite{camden2026lighting}. Data is requested by month; because data.police.uk only retains a rolling window of recent history, the pipeline detects the earliest month actually available at run time and clips the request accordingly rather than assuming a fixed start date.
+
+Two harm-oriented crime weightings are computed per incident: a \emph{severity} score (1-3) based on sentencing-severity weightings from the Cambridge Crime Harm Index~\cite{sherman2016cambridge} and the ONS Crime Severity Score methodology~\cite{ons2016severity}, and a separate \emph{perceived risk} score (1-4) based on the Signal Crimes Perspective~\cite{innes2004signal,innesfielding2002signal} and ONS perception/anti-social-behaviour survey data~\cite{ons2022csew}, under which visible disorder (e.g. anti-social behaviour) can score above a more legally severe but less visible offence. Both are acknowledged simplifications of each source study's original weights, applied onto data.police.uk's 14 broad offence categories rather than a reproduction of either study.
+
+Because police-recorded incident coordinates are anonymised to a fixed set of snap points rather than exact addresses, each incident's influence is spread across nearby streets using Network Kernel Density Estimation (NetKDE)~\cite{chainey2008hotspot}, with distance measured along the walkable street graph (via Dijkstra shortest paths) rather than in a straight line, so an incident cannot influence a street on the other side of a wall or a canal. A spatial lag is also computed, aggregating each metric across a street's directly neighbouring edges. Lighting features (lamp count, lamp density per kilometre, and a binary lit/unlit flag) are collected separately and are not subject to this same temporal or predictive treatment (see \emph{Lighting Indicator} below).
+
+\subsection{Predictive Safety Model}
+
+\textbf{<PLACEHOLDER - David to review/edit>}
+The project proposal considered two candidate architectures: an XGBoost binary classifier feeding an A* search, and a graph attention network (GAT) predicting risk directly over the street network.
+
+What was implemented is an XGBoost \emph{regressor} that forecasts future crime-related risk density at street level. The wide-format monthly dataset is restructured into a long-format panel (one row per street segment per month), and temporal lag features (1-, 2-, and 3-month lookbacks, grouped strictly by street segment) give the model historical context. All-time cumulative columns and same-month target metrics are deliberately excluded from the feature set to prevent data leakage. The data is split chronologically, training on historical months and validating on a held-out future period, rather than using a random split, since a random split would let future information leak into training.
+
+To generate a forward-looking risk estimate, the most recent available month's data is shifted forward to serve as the new one-month lag, and the model's predicted crime count is converted to a density (predicted count divided by street length). This density is min-max scaled into an ordinal \texttt{safety\_tag\_value} from 1 (baseline) to 11 (highest risk), written to \texttt{osm\_safety\_tags.csv} keyed by OpenStreetMap way ID. A minimum tag value is enforced so that no street receives a zero-cost weighting downstream. Node-level aggregation was deliberately not used, since Valhalla's routing costing requires continuous per-edge penalties to discourage travelling \emph{down} a dangerous street, not merely arriving at a risky junction.
+
+\subsection{Routing Integration}
+
+Rather than implementing a custom path-finding algorithm, the risk tags produced by the model are converted into cost multipliers and supplied to Valhalla~\cite{valhalla2026}, an open-source routing engine, via its native \texttt{linear\_cost\_factors} request parameter. Each flagged street's multiplier is computed as
+\[
+\text{multiplier} = 1 + \text{SCALE} \times (\text{tag} - 1),
+\]
+where SCALE is a single tunable constant. Streets at the baseline tag (the large majority of the network) receive no multiplier and are omitted from the request entirely, keeping each request small. Valhalla's existing shortest-path search then naturally prefers routes that avoid heavily-multiplied streets where a reasonable detour exists, while still permitting a short traversal of a risky street when no reasonable alternative is available, since the engine is minimising a distorted notion of distance rather than obeying a hard exclusion rule.
+
+\subsubsection*{Safety Score}
+A separate, purely descriptive \textbf{safety score} (0-100) is computed \emph{after} routing, by measuring what proportion of a returned route's length passes within a fixed proximity radius of a flagged street; this score has no influence on which route is chosen; it exists to communicate, in an interpretable way, how much residual exposure a given route carries.
+
+\subsubsection*{Lighting Indicator}
+A second, independently displayed \textbf{lighting score} (0-100) reports what proportion of a route's length passes near a currently lit street, based directly on the raw lamp dataset rather than a trained forecast. It was deliberately kept out of the routing cost function and out of the automatic ``recommended route'' selection, so that the routing decision continues to optimise for the modelled safety objective alone; the lighting score is intended as an at-a-glance signal for the user's own judgement, particularly for evening or night-time use.
 
 \section{Experiments}
 
-Describe the experiments you performed. You may want to create separate subsections to further structure this section.
-
 \subsection{Dataset}
-
-Briefly describe your dataset in a separate subsection.
+The street network, crime, stop-and-search, and lighting data are all scoped to the London Borough of Camden, extracted as an OpenStreetMap \texttt{.osm.pbf} file via the BBBike extract service~\cite{bbbike2026}. \textbf{The exact date range of data actually used for model training, and the final row counts after cleaning, are not recorded in the materials available for this report and should be confirmed and stated here by the data lead before submission.} Records with missing or non-numeric coordinates and exact duplicate rows are removed during cleaning, and all coordinates are reprojected to the British National Grid to support metre-based distance calculations.
 
 \subsection{Software}
-
-Briefly list (and cite) software you used.
+The data pipeline uses Python with OSMnx~\cite{boeing2017osmnx}, GeoPandas, Shapely, pandas, and pyproj. The predictive model uses XGBoost. The routing engine is Valhalla~\cite{valhalla2026}, run inside Docker alongside a Python (FastAPI) proxy service that injects the safety cost factors into each routing request and computes the descriptive safety and lighting scores. The frontend is a React/MapLibre web application (adapted from Valhalla's own reference web app) presenting routes, scores, and turn-by-turn directions to the user.
 
 \subsection{Hardware}
-
-If relevant, list hardware resources you used.
-
+\textbf{<PLACEHOLDER>}
 
 \section{Results and Discussion}
 
-Describe the results you obtained from the experiments and interpret them.
-Optionally, you could split "Results and Discussion" into two separate sections.
+\textbf{<PLACEHOLDER>}
+
+\textbf{<PLACEHOLDER - re. Routing UI>} The SCALE parameter controls a genuine trade-off: a street with a 4$\times$ multiplier is treated as roughly four times its real length, so the engine takes a detour only when a genuinely shorter alternative exists, whereas a street with a much higher multiplier (up to 31$\times$ at the highest observed risk tag during development) is avoided far more readily, but the engine will still traverse a short high-risk stretch rather than accept an extremely long detour, since it is minimising a distorted distance rather than applying a hard exclusion. A ``recommended route'' selection was also implemented on top of the three routes Valhalla returns per request: by default the fastest route is recommended, but if its descriptive safety score falls below a threshold, the fastest route within a 20\% time budget that clears the threshold is recommended instead.
+
+Figures~\ref{fig:ui-screenshot-1} and~\ref{fig:ui-screenshot-2} are placeholders for screenshots of the working interface and should be replaced with real captures of the deployed application before submission.
+
+\begin{figure}[t]
+\begin{center}
+   \includegraphics[width=0.8\linewidth]{figures/ui-screenshot-1.pdf}
+\end{center}
+   \caption{Placeholder - replace with a screenshot of the route summary panel, showing distance, time, safety score, and lighting score for a suggested route.}
+\label{fig:ui-screenshot-1}
+\end{figure}
+
+\begin{figure}[t]
+\begin{center}
+   \includegraphics[width=0.8\linewidth]{figures/ui-screenshot-2.pdf}
+\end{center}
+   \caption{Placeholder - replace with a screenshot of the safety map viewer, showing flagged streets overlaid on the Camden street network.}
+\label{fig:ui-screenshot-2}
+\end{figure}
 
 \section{Conclusions}
 
-Describe your conclusions here. If there are any future directions, you can describe them here, or you can create a new section for future directions.
+\textbf{<PLACEHOLDER - comparisons and evaluation>}
+This project delivers a working, deployable prototype: a pedestrian router for Camden that prioritises safety, built by attaching a predictive crime-risk model's output to a production routing engine's native costing mechanism.
 
 \section{Acknowledgements}
 
-List acknowledgements if any. For example, if someone provided you a dataset, or you used someone else's resources, this is a good place to acknowledge the help or support you received.
+This project relies entirely on publicly available data and open-source software. We acknowledge OpenStreetMap and its contributors~\cite{osm2026}, the UK Police open data initiative~\cite{datapoliceuk2026}, the London Borough of Camden's open data portal~\cite{camden2026lighting}, the Valhalla routing engine and its contributors~\cite{valhalla2026}, and the BBBike extract service~\cite{bbbike2026}.
+\textbf{<PLACEHOLDER - more to add?>}
 
 \section{Contributions}
 
-Describe the contributions of each team member who worked on this project. 
+The project proposal defined three lead roles:
 
+\begin{itemize}
+\item \textbf{AI Research \& Data Lead - Hongyuan Zhai:} AI problem formulation, requirement analysis, and data collection, cleaning, and preparation.
+\item \textbf{AI Model Lead - David Shafirovich:} AI model implementation, training, testing, and evaluation.
+\item \textbf{Deployment Lead - Raena Fadzil:} front-end application development, model integration with the front-end, and stretch goals.
+\end{itemize}
+
+\textbf{<PLACEHOLDER - more to add?>}
 Note: For rubric, refer to the Group Project Guidelines: \url{https://qmplus.qmul.ac.uk/mod/resource/view.php?id=3794535}
 
 {\small
