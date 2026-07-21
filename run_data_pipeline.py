@@ -453,7 +453,7 @@ def fetch_stop_search(boundary_poly_metric, months: list[str]) -> gpd.GeoDataFra
 # --------------------------------------------------------------------------
 
 def fetch_lighting(url: str) -> gpd.GeoDataFrame:
-    """Pull Camden lamp points through the Socrata API, with paging."""
+    """Pull Camden lamp points through the Socrata API, extracting install dates."""
     rows, offset, page = [], 0, 5000
     while True:
         params = {"$limit": page, "$offset": offset}
@@ -467,13 +467,22 @@ def fetch_lighting(url: str) -> gpd.GeoDataFrame:
         if len(batch) < page:
             break
 
-    lats, lngs = [], []
+    lats, lngs, install_months = [], [], []
     for r in rows:
         lat, lng = _extract_lat_lng(r)
         lats.append(lat)
         lngs.append(lng)
+        
+        # Socrata Floating Timestamps are ISO 8601 (e.g., '2014-12-19T00:00:00')
+        install_date = r.get("install_date")
+        if install_date:
+            install_months.append(install_date[:7])
+        else:
+            install_months.append("1900-01") # Legacy infrastructure fallback
+
     df = pd.DataFrame(rows)
     df["lat"], df["lng"] = lats, lngs
+    df["install_month"] = install_months
 
     for col in list(df.columns):
         if df[col].apply(lambda v: isinstance(v, (dict, list))).any():
@@ -813,22 +822,36 @@ def build_crime_stop_features(edges: gpd.GeoDataFrame, crime: gpd.GeoDataFrame,
     return out
 
 
-def build_lamp_features(edges: gpd.GeoDataFrame, lamps: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Lamp features only, kept in a table of its own. See the note in
-    get_network about 'lit' sometimes not existing at all."""
-    lamp_count = snap_counts(lamps, edges, LAMP_SNAP_MAX_M, "lamp_count")
-
-    keep_cols = [c for c in ["edge_id", "osmid", "u", "v", "length", "lit", "geometry"]
-                if c in edges.columns]
-    out = edges[keep_cols].merge(lamp_count, on="edge_id")
-
+def build_lamp_features(edges: gpd.GeoDataFrame, lamps: gpd.GeoDataFrame, months: list[str]) -> gpd.GeoDataFrame:
+    """Lamp features, evaluated month-by-month to reflect cumulative installations."""
+    joined = gpd.sjoin_nearest(
+        lamps, edges[["edge_id", "geometry"]],
+        how="left", max_distance=LAMP_SNAP_MAX_M, distance_col="_dist"
+    )
+    joined = joined.dropna(subset=["edge_id"])
+    
+    keep_cols = [c for c in ["edge_id", "osmid", "u", "v", "length", "lit", "geometry"] if c in edges.columns]
+    out = edges[keep_cols].copy()
     length_km = (out["length"] / 1000.0).clip(lower=1e-6)
-    out["lamp_per_km"] = out["lamp_count"] / length_km
     osm_lit = out["lit"].astype(str).str.lower().eq("yes") if "lit" in out else False
+
+    # Static fallback
+    lamp_count = joined.groupby("edge_id").size()
+    out["lamp_count"] = out["edge_id"].map(lamp_count).fillna(0).astype(int)
+    out["lamp_per_km"] = out["lamp_count"] / length_km
     out["is_lit"] = (osm_lit | (out["lamp_count"] > 0)).astype(int)
 
-    final_cols = [c for c in ["edge_id", "osmid", "u", "v", "lamp_count", "lamp_per_km",
-                              "is_lit", "geometry"] if c in out.columns]
+    # Monthly cumulative features
+    for m in months:
+        safe_m = str(m).replace("-", "_")
+        active_lamps = joined[joined["install_month"] <= m]
+        active_count = active_lamps.groupby("edge_id").size()
+        
+        out[f"lamp_count_{safe_m}"] = out["edge_id"].map(active_count).fillna(0).astype(int)
+        out[f"lamp_per_km_{safe_m}"] = out[f"lamp_count_{safe_m}"] / length_km
+        out[f"is_lit_{safe_m}"] = (osm_lit | (out[f"lamp_count_{safe_m}"] > 0)).astype(int)
+
+    final_cols = [c for c in out.columns if c != "lit"] 
     return out[final_cols]
 
 
@@ -873,7 +896,7 @@ def main():
     crime_features.to_file(OUT_DIR / "edge_features.gpkg", driver="GPKG")
     crime_features.drop(columns="geometry").to_csv(OUT_DIR / "edge_features.csv", index=False)
 
-    lamp_features = build_lamp_features(edges, lamps)
+    lamp_features = build_lamp_features(edges, lamps, months)
     lamp_features.to_file(OUT_DIR / "edge_lamp_features.gpkg", driver="GPKG")
     lamp_features.drop(columns="geometry").to_csv(OUT_DIR / "edge_lamp_features.csv", index=False)
 
