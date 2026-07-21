@@ -240,7 +240,7 @@ STOP_SEARCH_SNAP_MAX_M = 50 # same anonymisation as crime, same threshold
 LAMP_SNAP_MAX_M = 25        # lamps sit on or beside the kerb
 
 # Where outputs go.
-OUT_DIR = Path("data_out")
+OUT_DIR = Path(__file__).parent / "data_out"
 OUT_DIR.mkdir(exist_ok=True)
 
 
