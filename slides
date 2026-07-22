@@ -1,0 +1,22 @@
+\documentclass{beamer}
+\usetheme{metropolis}
+
+\title{Deep Learning and Neural Networks}
+\author{Your Name}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+    \titlepage
+\end{frame}
+
+\begin{frame}{Model Architecture}
+    This presentation is automatically compiled via GitHub Actions.
+    \begin{itemize}
+        \item Training data processed.
+        \item Backpropagation implemented.
+    \end{itemize}
+\end{frame}
+
+\end{document}
