@@ -1,6 +1,151 @@
 \documentclass{beamer}
 \usetheme{metropolis}
 
+% ---- Title ----
+\title[NightRunner]{An AI Approach to Running Route Optimisation for Safety}
+\subtitle{ECS7036P --- Group 8}
+\author[Group 8]{David Shafirovich 200349804 \and Hongyuan Zhai 260019183 \and Raena Fadzil 250988321 }
+\institute[QMUL]{Queen Mary University of London}
+\date{\24 JUL 2026}
+
+\begin{document}
+
+% ---- Title slide ----
+\begin{frame}
+  \titlepage
+\end{frame}
+
+% ---- Outline ----
+\begin{frame}{Outline}
+  \tableofcontents
+\end{frame}
+
+%==================================================================
+\section{Introduction}
+
+\begin{frame}{Motivation: safety is the missing objective}
+  \begin{itemize}
+    \item Running is booming (London Marathon, Strava), but it is often done \textbf{solo, after dark, in unfamiliar areas}.
+    \item Mainstream running and navigation apps optimise almost entirely for \textbf{distance or time}.
+    \item \textbf{None treat personal safety as a routing objective}, despite it being a common concern.
+  \end{itemize}
+  \vspace{0.5em}
+  \begin{block}{Our question}
+    Can personal safety be treated as a \emph{primary} objective in pedestrian route planning, rather than an afterthought?
+  \end{block}
+  \vspace{0.3em}
+  \textbf{Our answer:} a safety-first, lighting-aware routing tool for the London Borough of Camden.
+\end{frame}
+
+%==================================================================
+\section{Related Work}
+
+\begin{frame}{Related Work}
+  \begin{itemize}
+    \item \textbf{Atterkar et al. (2025)} --- Women Safe Route Navigation, scores streets by risk.
+    \item \textbf{Harideviprathap et al. (2026)} --- Mo-GAT, spatiotemporal graph attention network for safety risk.
+    \item \textbf{Anson (2025)} --- ML-weighted road network consumed by a path-finder (closest to our design).
+    \item \textbf{Tang et al. (2024)} --- spatial optimisation + LLMs for urban itineraries.
+  \end{itemize}
+  \vspace{0.5em}
+  \begin{block}{The gap we fill}
+    Prior work targets specific demographics or general commuting. \textbf{None targets the everyday runner}, and no mainstream running app has a safety objective at all. We integrate a data-driven safety model directly into a general-purpose open-source routing engine.
+  \end{block}
+\end{frame}
+
+%==================================================================
+\section{Proposed Method}
+
+% ------------------ DATA PIPELINE (Hongyuan) ------------------
+\begin{frame}{Data Pipeline --- Sources \& Weightings \hfill \small(Hongyuan)}
+  \textbf{My role:} turn raw open data into a clean, model-ready table --- one row per street in Camden.
+  \vspace{0.4em}
+  \begin{itemize}
+    \item Three open datasets on an \textbf{OpenStreetMap} graph: crime + stop-and-search (\textbf{UK Police API}), lighting (\textbf{Camden Council}).
+    \item Crime pulled month by month; script auto-clips to whatever the police API actually publishes (rolling window), no hard-coded dates.
+  \end{itemize}
+  \vspace{0.3em}
+  \textbf{Key design --- each crime scored two ways:}
+  \begin{itemize}
+    \item \textbf{Severity} (1--3): legal harm --- Cambridge Crime Harm Index.
+    \item \textbf{Perceived risk} (1--4): how unsafe it \emph{feels} --- Signal Crimes theory; visible disorder can outweigh a hidden but legally worse crime.
+    \item Both academically grounded, not guesses.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Data Pipeline --- Anonymisation, Ethics \& Output \hfill \small(Hongyuan)}
+  \begin{itemize}
+    \item \textbf{Anonymised locations:} police points sit $\sim$125\,m apart, not exact addresses.
+    \item Spread each crime to nearby streets with \textbf{Network KDE} --- distance along real walkable streets (not straight-line), so it can't leak across a wall or canal.
+    \item Radius = 125\,m to match that spacing; smoothed \textbf{per month} so the future never leaks into the past.
+    \item \textbf{Ethics:} dropped gender, age, ethnicity --- avoids baking demographic bias into a ``safety'' score.
+  \end{itemize}
+  \vspace{0.3em}
+  \begin{block}{Handed over}
+    Two tables (crime + lighting, kept separate), each row carrying real OSM ID + coordinates.\\
+    \textbf{36 months $\cdot$ $\sim$35,500 streets $\cdot$ 230,000 crimes $\cdot$ 24,000 stop-and-searches.}
+  \end{block}
+\end{frame}
+
+% ------------------ PREDICTIVE MODEL (David) ------------------
+\begin{frame}{Predictive Safety Model \hfill \small(David)}
+  \begin{center}
+    \textbf{<PLACEHOLDER --- David>}
+  \end{center}
+  \begin{itemize}
+ 
+  \end{itemize}
+\end{frame}
+
+% ------------------ ROUTING INTEGRATION (Raena) ------------------
+\begin{frame}{Routing Integration \& Front-End \hfill \small(Raena)}
+  \begin{center}
+    \textbf{<PLACEHOLDER --- Raena>}
+  \end{center}
+  \begin{itemize}
+ 
+  \end{itemize}
+\end{frame}
+
+%==================================================================
+\section{Results \& Discussion}
+
+\begin{frame}{Results \& Discussion \hfill \small(David / Raena)}
+  \begin{center}
+    \textbf{<PLACEHOLDER --- routing evaluation results>}
+  \end{center}
+  \begin{itemize}
+ 
+  \end{itemize}
+\end{frame}
+
+%==================================================================
+\section{Conclusions}
+
+\begin{frame}{Conclusions}
+  \begin{itemize}
+    \item A \textbf{working, deployable prototype}: a Camden pedestrian router that prioritises safety.
+    \item Built by attaching a predictive crime-risk model's output to a \textbf{production routing engine's} native costing.
+    \item Demonstrates that \textbf{safety can be a first-class routing objective}, not an afterthought.
+  \end{itemize}
+  \vspace{0.6em}
+  \begin{block}{Contributions}
+    \textbf{Hongyuan} --- data collection, cleaning \& feature engineering. \quad
+    \textbf{David} --- predictive model. \quad
+    \textbf{Raena} --- routing integration \& front-end.
+  \end{block}
+\end{frame}
+
+\begin{frame}{}
+  \centering
+  \Large Thank you --- questions?\\
+  \vspace{0.5em}
+  \normalsize \texttt{github.com/djshaf/NightRunner}
+\end{frame}
+
+\end{document}
+
+
 \title{Deep Learning and Neural Networks}
 \author{Your Name}
 \date{\today}
