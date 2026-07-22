@@ -91,6 +91,46 @@ The pipeline outputs two tables. \texttt{edge\_features.csv} holds the crime and
 \subsection{Predictive Safety Model}
 
 \textbf{<PLACEHOLDER - David to review/edit>}
+
+\subsection{Notes}
+
+\subsubsection{Model Architecture \& Objective}
+\begin{itemize}
+    \item \textbf{System:} The system uses an XGBoost Regressor (\texttt{xgb.XGBRegressor}).
+    \item \textbf{Objective Function:} The primary objective function is \texttt{reg:squarederror}, as the model is designed to predict continuous float values representing the NetKDE Perceived Risk score of a street.
+\end{itemize}
+
+\subsubsection{Hyperparameter Configuration}
+\begin{itemize}
+    \item \textbf{Number of Trees:} 500 (\texttt{n\_estimators}).
+    \item \textbf{Learning Rate:} 0.05.
+    \item \textbf{Tree Depth:} Maximum depth of 6.
+    \item \textbf{Sampling:} Both \texttt{subsample} and \texttt{colsample\_bytree} are set to 0.8 to prevent overfitting.
+    \item \textbf{Categorical Handling:} Natively enabled (\texttt{enable\_categorical=True}) for features like highway types.
+    \item \textbf{Early Stopping:} Set to 50 rounds to halt training if validation performance stops improving.
+\end{itemize}
+
+\subsubsection{Training \& Evaluation Strategy}
+\begin{itemize}
+    \item \textbf{Chronological Split:} The dataset is split sequentially, using a cutoff month (March 2026) to train on past historical data and test strictly on future data.
+    \item \textbf{Data Masking:} Raw identifiers (e.g., \texttt{osmid}, \texttt{edge\_id}, \texttt{name}) and current-month crime totals are dropped to prevent the model from learning raw IDs or experiencing target leakage.
+    \item \textbf{Evaluation Metric:} The model's predictive accuracy is evaluated using Mean Absolute Error (MAE) on the future test set.
+    \item \textbf{Interpretability:} Feature importance is calculated and plotted using ``Information Gain'' to determine which variables have the highest predictive power.
+\end{itemize}
+
+\subsubsection{Input Features}
+\begin{itemize}
+    \item \textbf{Historical Lags:} Relies on spatial-temporal lag features, specifically 2, 3, and 4-month historical lags for NetKDE perceived risk and stop-and-search counts.
+    \item \textbf{Static Metadata:} Incorporates street-level characteristics including start/end coordinates (\texttt{u\_lat}, \texttt{v\_lng}, etc.), street length, and highway category.
+    \item \textbf{Lighting Data:} Feeds on static environmental variables like \texttt{lamp\_per\_km} and \texttt{is\_lit}.
+\end{itemize}
+
+\subsubsection{Output Generation \& Routing Integration}
+\begin{itemize}
+    \item \textbf{Baseline Predictions:} The model predicts a raw future safety score, with predictions clipped at a lower bound of 0.
+    \item \textbf{Cost Scaling:} The raw predictions undergo a logarithmic transformation (\texttt{log1p}), followed by min-max scaling to convert them into a standardized 1 to 10 ``Safety Cost'' scale.
+    \item \textbf{Mapping:} The final 1--10 integer values are mapped back to OpenStreetMap (OSM) nodes and edges as safety tags, which are then used as penalty weights by the routing algorithm to calculate the safest daytime and nighttime paths.
+\end{itemize}
 The project proposal considered two candidate architectures: an XGBoost binary classifier feeding an A* search, and a graph attention network (GAT) predicting risk directly over the street network.
 
 What was implemented is an XGBoost \emph{regressor} that forecasts future crime-related risk density at street level. The wide-format monthly dataset is restructured into a long-format panel (one row per street segment per month), and temporal lag features (1-, 2-, and 3-month lookbacks, grouped strictly by street segment) give the model historical context. All-time cumulative columns and same-month target metrics are deliberately excluded from the feature set to prevent data leakage. The data is split chronologically, training on historical months and validating on a held-out future period, rather than using a random split, since a random split would let future information leak into training.
@@ -161,8 +201,8 @@ We thank Dr Anum Masood and Stephanie Keddy for their guidance and feedback thro
 The project proposal defined three lead roles:
 
 \begin{itemize}
-\item \textbf{AI Research \& Data Lead - Hongyuan Zhai:} AI problem formulation, requirement analysis, and data collection, cleaning, and preparation.
-\item \textbf{AI Model Lead - David Shafirovich:} AI model implementation, training, testing, and evaluation.
+\item \textbf{Data Lead - Hongyuan Zhai:} Requirement analysis, and data collection, cleaning, and preparation.
+\item \textbf{AI Model Lead - David Shafirovich:} AI problem formulation, model implementation, training, testing, and evaluation.
 \item \textbf{Deployment Lead - Raena Fadzil:} front-end application development, model integration with the front-end, and stretch goals.
 \end{itemize}
 
