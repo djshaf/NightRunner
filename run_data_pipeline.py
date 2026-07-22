@@ -100,6 +100,7 @@ import numpy as np
 import osmnx as ox
 import pandas as pd
 import requests
+import polyline
 from shapely.geometry import Point, shape
 
 
@@ -873,6 +874,36 @@ def fetch_sun_times(lat: float, lng: float, dates: list[str]) -> pd.DataFrame:
         time.sleep(1)
     return pd.DataFrame(rows)
 
+# --------------------------------------------------------------------------
+# 7. EXPORT HELPERS
+# --------------------------------------------------------------------------
+
+def export_with_polyline6(gdf: gpd.GeoDataFrame, out_dir: Path, file_prefix: str):
+    """Encodes Shapely LineStrings to Polyline6 and saves to GPKG and CSV."""
+    df_out = gdf.copy()
+    
+    # Helper function to convert Shapely LineString to Polyline6
+    def geom_to_poly6(geom):
+        if not geom or getattr(geom, 'is_empty', True):
+            return ""
+        
+        # Shapely stores coordinates as (longitude, latitude)
+        # Polyline6 requires (latitude, longitude), so we flip them
+        coords = [(y, x) for x, y in geom.coords]
+        
+        # Encode with precision 6 (Valhalla's standard)
+        return polyline.encode(coords, 6)
+
+    # Create the new column
+    df_out["polyline6"] = df_out["geometry"].apply(geom_to_poly6)
+    
+    # Save Full GeoPackage (keeps native Shapely geometries for GIS software)
+    gdf.to_file(out_dir / f"{file_prefix}.gpkg", driver="GPKG")
+    
+    # Drop the un-saveable Shapely object, keep our new string, and export CSV
+    df_csv = df_out.drop(columns=["geometry"])
+    df_csv.to_csv(out_dir / f"{file_prefix}.csv", index=False)
+
 
 # --------------------------------------------------------------------------
 # MAIN
@@ -893,12 +924,10 @@ def main():
     lamps.to_file(OUT_DIR / "lamp_points.gpkg", driver="GPKG")
 
     crime_features = build_crime_stop_features(edges, crime, stops, months)
-    crime_features.to_file(OUT_DIR / "edge_features.gpkg", driver="GPKG")
-    crime_features.drop(columns="geometry").to_csv(OUT_DIR / "edge_features.csv", index=False)
+    export_with_polyline6(crime_features, OUT_DIR, "edge_features")
 
     lamp_features = build_lamp_features(edges, lamps, months)
-    lamp_features.to_file(OUT_DIR / "edge_lamp_features.gpkg", driver="GPKG")
-    lamp_features.drop(columns="geometry").to_csv(OUT_DIR / "edge_lamp_features.csv", index=False)
+    export_with_polyline6(lamp_features, OUT_DIR, "edge_lamp_features")
 
     print("\n[done] wrote:")
     for f in ["crime_points.gpkg", "stop_search_points.gpkg", "lamp_points.gpkg",
