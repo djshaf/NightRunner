@@ -6,7 +6,7 @@
 # Data Collection and Cleaning
 **Script:** `run_data_pipeline.py`
 
-## How to Run
+## Running Data Pipeline
 
 Install the dependencies once (`polyline` is optional, only needed for the polyline6 routing column):
 
@@ -94,8 +94,10 @@ Python with `osmnx`, `geopandas`, `shapely`, `requests`, `pandas`, `pyproj`, `ne
 
 # ML/NN pipeline
 
+**Script:** `Notebook.ipynb`
+
 ## Running the pipeline 
-Notebook.ipynb is run monthly in order to train the model, process and output the safety scores to osm_safety_tags.csv for front end intake. 
+Notebook.ipynb is to be run in order to train the model, process and output the safety scores and testing data to osm_safety_tags.csv ready for front end intake. 
 
 ## Purpose
 Processes historical street-level crime and stop-and-search features, trains a machine learning model to forecast future perceived crime risk, and transforms those predictions into physical routing penalties for integration with pedestrian routing engines.
