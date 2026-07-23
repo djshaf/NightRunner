@@ -248,14 +248,14 @@ Night-time routing introduces another objective optimisation problem; due to the
 \subsection{Limitations}
 
 \begin{enumerate}
-    \item \textbf{Temporal \& Spatial Aggregation:}
+    \item \textbf{Temporal \& Spatial Aggregation:} UK Police API is subject to a 2-month publication delay, forcing the model to rely on a $t-2$ lag. Adding to this, police crime coordinates are anonymized every ~125m interval, therefore NetKDE smoothing resolves this but leaves the data with artificial peaks. 
     \item \textbf{Subjectivity:}
     \item \textbf{Lighting Limitations:}
     \item \textbf{Static Time-of-Day:}
 \end{enumerate}
 
 \subsection{<PLACEHOLDER>}
-\textbf{<PLACEHOLDER - re. Data>} Several limitations constrain the data pipeline. Crime records are month-level, so the signal cannot separate night from day despite night safety being the core concern. Two weightings were built, but only perceived risk feeds the model. Stop-and-search counts reflect where police operate, not solely where danger lies, and is_lit only flags a lamp within 25m, with no data on whether it works and the same snapshot applied to every month. Finally, the study covers Camden alone, so generalisation to other areas is untested.
+\textbf{<PLACEHOLDER - re. Data>} Several limitations constrain the data pipeline. Crime records are month-level, so the signal cannot separate night from day despite night safety being the core concern. Two weightings were built, but only perceived risk feeds the model. Stop-and-search counts reflect where police operate, not solely where danger lies, and \texttt{is\_lit} only flags a lamp within 25m, with no data on whether it works and the same snapshot applied to every month. Finally, the study covers Camden alone, so generalisation to other areas is untested.
 
 \textbf{<PLACEHOLDER - re. Routing UI>} The SCALE parameter controls a genuine trade-off: a street with a 4$\times$ multiplier is treated as roughly four times its real length, so the engine takes a detour only when a genuinely shorter alternative exists, whereas a street with a much higher multiplier (up to 31$\times$ at the highest observed risk tag during development) is avoided far more readily, but the engine will still traverse a short high-risk stretch rather than accept an extremely long detour, since it is minimising a distorted distance rather than applying a hard exclusion. A ``recommended route'' selection was also implemented on top of the three routes Valhalla returns per request: by default the fastest route is recommended, but if its descriptive safety score falls below a threshold, the fastest route within a 20\% time budget that clears the threshold is recommended instead.
 
