@@ -65,7 +65,7 @@ Open records of crime, stop-and-search, and street lighting are attached to an O
 
 The data is passed through an XGBoost Regressor using spatial-temporal lags and infrastructure metadata to forecast (perceived) street-level risk. The model employs Tweedie deviance for a zero-inflated, right-skewed distribution. These continuous values are then scaled and integrated with lighting penalties to be fed into the pathfinding algorithm for optimal, safe routing. 
 
-In a Monte Carlo evaluation of 1,000 random origin-destination pairs across Camden, the recommended route diverged from the shortest path in 98.5\% of cases. Daytime routing reduced crime-risk exposure by 80.46\% for a 7.32\% increase in distance, while night-time routing, which additionally penalises unlit streets, cut darkness exposure by 53.35\% at the cost of a 23.15\% detour. The predictive model achieved a mean absolute error of 2.46 on held-out future months.
+In a Monte Carlo evaluation of 1,000 random origin-destination pairs across Camden, the recommended route diverged from the shortest path in 98.5\% of cases. Daytime routing reduced crime-risk exposure by 80.99\% for a 7.98\% increase in distance, while night-time routing, which additionally penalises unlit streets, cut darkness exposure by 52.76\% at the cost of a 23.56\% detour. The predictive model achieved a mean absolute error of 2.46 on held-out future months.
 
 The result is a prototype showing that data-driven safety routing is feasible and practically useful for everyday runners.
 
@@ -260,7 +260,7 @@ To evaluate whether the model was indeed usable, effective and successful in the
 
 \subsection{Lighting vs Crime Trade-off}
 
-Night-time routing introduces another objective optimisation problem; due to the dark penalty ($\delta = 5.0$), the night-time routing achieved a 53.35\% reduction in darkness exposure. However, this comes at a cost of a detour penalty jumping to 23.15\%, and a crime risk reduction metric dropping from 80.46\% to 63.72\%(see Appendix \ref{app:data_tables}). This drop makes logical sense, as well-lit streets (commercial and nightlife districts) may sometimes suffer from higher base crime rates. The risk reduction is still very sizeable, and this represents a compromise to ensure that routing is significantly safer in both the perceived and physical sense. 
+Night-time routing introduces another objective optimisation problem; due to the dark penalty ($\delta = 5.0$), the night-time routing achieved a 52.76\% reduction in darkness exposure. However, this comes at a cost of a detour penalty jumping to 23.56\%, and a crime risk reduction metric dropping from 80.99\% to 65.74\%(see Appendix \ref{app:data_tables}). This drop makes logical sense, as well-lit streets (commercial and nightlife districts) may sometimes suffer from higher base crime rates. The risk reduction is still very sizeable, and this represents a compromise to ensure that routing is significantly safer in both the perceived and physical sense. 
 
 \subsection{Limitations}
 
@@ -299,7 +299,7 @@ A ``recommended route'' selection was also implemented on top of the three route
 \section{Conclusions}
 
 \subsection{Goals \& Previous Work}
-Against the project proposal's goal of a data-driven, deployable safety router, the evaluation shows the system does more than passively score routes. 98.5\% of simulated journeys actively diverged from the shortest path, and daytime routing achieved an 80.46\% reduction in crime-risk exposure for a modest 7.32\% distance cost, with night-time routing trading a larger detour for a 53.35\% reduction in darkness exposure. This project delivers a working, deployable prototype: a pedestrian router for Camden that prioritises safety, built by attaching a predictive crime-risk model's output and lighting coverage data to a production routing engine's native costing mechanism. The methodology of this particular project advances prior approaches to safety navigation~\cite{Novack2018} by engineering said temporal pipeline that utilizes NetKDE in a practical approach ~\cite{Wu2022}. The system takes signal crime theory ~\cite{Innes2004} and several crime indexes ~\cite{Sherman2016} to output a predictive model that mathematically parametrizes human perceptions of safety to mapped graphs in the real world. 
+Against the project proposal's goal of a data-driven, deployable safety router, the evaluation shows the system does more than passively score routes. 98.5\% of simulated journeys actively diverged from the shortest path, and daytime routing achieved an 80.99\% reduction in crime-risk exposure for a modest 7.98\% distance cost, with night-time routing trading a larger detour for a 52.76\% reduction in darkness exposure. This project delivers a working, deployable prototype: a pedestrian router for Camden that prioritises safety, built by attaching a predictive crime-risk model's output and lighting coverage data to a production routing engine's native costing mechanism. The methodology of this particular project advances prior approaches to safety navigation~\cite{Novack2018} by engineering said temporal pipeline that utilizes NetKDE in a practical approach ~\cite{Wu2022}. The system takes signal crime theory ~\cite{Innes2004} and several crime indexes ~\cite{Sherman2016} to output a predictive model that mathematically parametrizes human perceptions of safety to mapped graphs in the real world. 
 
 \subsection{Future Work}
 
@@ -341,8 +341,8 @@ Each member led their own area as above and wrote the corresponding sections of 
         \textbf{Routing Strategy} & \textbf{Avg.\ Distance} & \textbf{Dist.\ Increase} & \textbf{Risk Reduction} & \textbf{Unlit Avoided} & \textbf{Darkness Red.} \\
         \hline
         Baseline (Shortest Path) & 3511.4m & N/A & N/A & N/A & N/A \\
-        Daytime ML Routing & 3755.1m & 7.32\% & 80.46\% & -92.8m & -11.63\% \\
-        Nighttime ML Routing & 4335.8m & 23.15\% & 63.72\% & +918.7m & 53.35\% \\
+        Daytime ML Routing & 3778.3m & 7.98\% & 80.99\% & -91.1m & -11.90\% \\
+        Nighttime ML Routing & 4346.8m & 23.56\% & 65.74\% & +910m & 52.76\% \\
         \hline
     \end{tabular}
     \vspace{0.1cm}
