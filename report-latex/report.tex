@@ -118,13 +118,13 @@ The pipeline outputs two tables. \texttt{edge\_features.csv} holds the crime and
 
 \subsubsection{Problem Formulation}
 
-The objective of this predictive safety routing system is to compute an optimal and safe path for pedestrians and runners operating at night. Urban street network is modeled as a weighted directed graph $G = (V, E)$, where $V$ represents street intersections (nodes), $E$ represents street segments (edges). Each edge $e = (u, v) \in E$ has a street length $l_e$, spatial geometry, static street infrastructure, and time-series historical crime metrics aggregated at monthly intervals $t \in T$. 
+The objective of this predictive safety routing system is to compute an optimal and safe path for pedestrians and runners operating at night. Urban street network is modeled as a weighted directed graph $G = (V, E)$, where $V$ represents street intersections (nodes), $E$ represents street segments (edges) ~\cite{LozanoDominguez2021}. Each edge $e = (u, v) \in E$ has a street length $l_e$, spatial geometry, static street infrastructure, and time-series historical crime metrics aggregated at monthly intervals $t \in T$. 
 
 The system separates future crime risk prediction from graph pathfinding by utilizing an \textbf{XGBoost Regressor} that estimates future spatial-temporal risk $y_{e, t}$ per street segment. These are then transformed to normalized edge costs $C_e \in [1, 10]$ and integrated into a dynamic graph function that accounts for environmental factors to determine optimal path via Djistra search algorithm. 
 
 \subsubsection{Network Kernel Density Estimation (NetKDE)}
 
-NetKDE was chosen in order to model risk diffusion along actual pedestrian pathways rather than euclidian space, while eliminating artifacts caused by spatial snapping. For each incident $i$ on edge $e$ risk diffuses in walkable paths using Djikstra's shortest-path distance $d_{\text{net}}(e, e')$ with a Gaussian kernel function $K(d_{\text{net}})$ bounded by distance $B = 125\text{ m}$. 
+NetKDE was chosen in order to model risk diffusion along actual pedestrian pathways rather than euclidian space, while eliminating artifacts caused by spatial snapping~\cite{Wu2022}. For each incident $i$ on edge $e$ risk diffuses in walkable paths using Djikstra's shortest-path distance $d_{\text{net}}(e, e')$ with a Gaussian kernel function $K(d_{\text{net}})$ bounded by distance $B = 125\text{ m}$. 
 \begin{align*}
 K(d_{\text{net}}) &= \exp\left( -\frac{1}{2} \left( \frac{d_{\text{net}}}{\sigma} \right)^2 \right), \\
 &\quad \text{where } \sigma = \frac{B}{3} = \frac{125}{3} \approx 41.67\text{ m}
@@ -159,7 +159,7 @@ Where:
 
 XGBoost was selected over alternative models mainly due to three main reasons:
 \begin{enumerate}
-    \item Tree-based gradient boosting outperforms GNNs and deep learning architectures on heterogeneous tabular datasets with dense scalar lag features.
+    \item Tree-based gradient boosting outperforms GNNs and deep learning architectures on heterogeneous tabular datasets with dense scalar lag features~\cite{Wu2022}.
     \item Native support for categorical features via numerical splits without expanding feature dimentionality.
     \item Fast prediction latency enabling faster scoring if more frequent data was to be obtained. 
 \end{enumerate}
