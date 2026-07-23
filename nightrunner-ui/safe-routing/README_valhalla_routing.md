@@ -6,13 +6,40 @@
 - `reranker/` — the proxy service:
   - `polyline6.py` — encode/decode for Valhalla's 6-digit-precision
     polylines (round-trip tested).
-  - `build_safety_factors.py` — turns your safety model's output into
-    `safety_factors.json`, the payload Valhalla actually consumes. **You
-    need to fill in `load_scored_edges()` with your real data loading** -
-    I haven't invented a format for your model's output since I don't have
-    it in front of me.
-  - `app.py` — the actual proxy. Injects `safety_factors.json` into every
-    `/route` call and forwards everything else untouched.
+  - `build_safety_factors.py` — joins `edge_features.csv`,
+    `osm_safety_tags.csv`, and `edge_lamp_features.csv` on `osmid` and
+    writes `safety_factors.json`: one `{shape, safety_factor,
+    lighting_factor}` entry per edge that needs either penalty. Missing
+    safety-tag or lamp data defaults to "safe"/"lit" (no penalty) rather
+    than being skipped.
+  - `app.py` — the actual proxy. Combines each entry's `safety_factor` and
+    `lighting_factor` into the single `factor` Valhalla expects (skipping
+    the lighting half if the request sets `is_daylight: true`, default
+    `false`), injects the result into every `/route` call's
+    `linear_cost_factors`, and forwards everything else untouched.
+  - `find_bad_factors.py` — binary-searches `safety_factors.json` for
+    entries that make Valhalla's edge-walk matching fail (any non-200
+    `/route` response), removes them, and records what it removed in
+    `excluded_shapes.json`.
+
+## `safety_factors.json` is already generated and trimmed - don't casually regenerate it
+This repo ships a `safety_factors.json` that's already been built from the
+committed CSVs **and** had every edge-walk-failing shape removed via
+`find_bad_factors.py` (removing bad shapes isn't optional here — as of this
+writing, ~46% of raw entries fail edge-walk matching, likely because
+`build_safety_factors.py` currently builds each shape from a straight
+2-point line between edge endpoints rather than the real multi-point curve
+already sitting in `edge_features.csv`'s `polyline6` column — a known,
+not-yet-fixed issue).
+
+**Do not run `build_safety_factors.py` again unless the underlying CSVs
+actually change.** Regenerating it from scratch silently wipes the trim and
+reintroduces every bad shape, with no warning. If you do need to regenerate
+it (e.g. updated safety/lighting data), you MUST re-run
+`find_bad_factors.py` afterward - it currently takes on the order of 10+
+minutes against the full Camden dataset - before restarting the reranker.
+`excluded_shapes.json` (written by that script) is a plain record of what
+was excluded and why; nothing reads it back in.
 
 ## What I can't do from here
 I'm running in a sandboxed container, not on your laptop, so I can't
@@ -31,13 +58,11 @@ above is written and syntax-checked, but you'll need to run it locally.
    git clone https://github.com/valhalla/web-app ../web-app
    ```
 
-3. **Generate your safety factors** (after filling in `load_scored_edges()`):
-   ```
-   cd reranker
-   pip install -r requirements.txt
-   python build_safety_factors.py
-   cd ..
-   ```
+3. **Safety/lighting factors are already committed** - `safety_factors.json`
+   is in `reranker/` and ready to use as-is. Skip straight to step 4 unless
+   you've actually changed `edge_features.csv`, `osm_safety_tags.csv`, or
+   `edge_lamp_features.csv`, in which case see the warning above before
+   regenerating.
 
 4. **Set `VITE_CENTER_COORDS`** in `docker-compose.yml` to your borough's
    centre point, and update the `tile_urls` environment variable (or drop
@@ -50,15 +75,16 @@ above is written and syntax-checked, but you'll need to run it locally.
    First boot will take a while — Valhalla builds graph tiles from your
    `.pbf` on first start. Once running:
    - Valhalla API: http://localhost:8002
-   - Safety-factor proxy: http://localhost:5000
+   - Safety-factor proxy: http://localhost:5050
    - Frontend: http://localhost:3000
 
-6. **Verify the safety weighting is actually doing something**: pick two
-   points either side of a street your model scored as unsafe, request a
-   route, and confirm it detours. If it doesn't, your `K` value in
-   `build_safety_factors.py` is probably too low, or the edge geometry
-   isn't matching (check Valhalla's logs — failed edge-walk matches are
-   usually visible there).
+6. **Verify the safety/lighting weighting is actually doing something**:
+   pick two points either side of a street flagged as unsafe or unlit,
+   request a route through the proxy (port 5050, not 8002 directly), and
+   confirm it detours. If it doesn't, `SAFETY_SCALE`/`LIGHTING_SCALE` in
+   `build_safety_factors.py` may be too low, or the edge geometry isn't
+   matching (check `docker compose logs reranker` and Valhalla's own logs —
+   failed edge-walk matches show up as non-200 `/route` responses).
 
 ## Things I flagged as unverified, worth double-checking yourself
 - The exact numeric bounds Valhalla enforces on `factor` in

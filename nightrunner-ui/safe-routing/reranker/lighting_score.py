@@ -44,12 +44,19 @@ def _haversine_m(lat1, lon1, lat2, lon2) -> float:
     return 2 * R * math.asin(math.sqrt(a))
 
 
-def load_lit_edges() -> Iterable[Tuple[List[Tuple[float, float]], bool]]:
+def load_lamp_status_by_osmid() -> dict:
     """
-    Joins edge_features.csv and edge_lamp_features.csv on osmid. Yields
-    (coords, is_lit) pairs for every LIT edge only (unlit edges aren't
-    needed - the scoring logic below only cares about proximity to lit
-    streets, not unlit ones).
+    Returns {osmid: is_lit} for every osmid that has at least one row in
+    edge_lamp_features.csv, averaging lamp_per_km across rows per osmid
+    (per the project owner's decision) and treating a way as "lit" if that
+    average is > 0.
+
+    Osmids with NO rows at all are simply absent from this dict - they are
+    not "unlit", they're "no data". Callers that want an "assume lit by
+    default" convention (e.g. build_safety_factors.py's routing-cost build,
+    matching how missing safety tags default to baseline/safe) should use
+    `lamp_status.get(osmid, True)` rather than treating a missing key as
+    unlit.
     """
     avg_lamp_by_osmid: dict = {}
     count_by_osmid: dict = {}
@@ -60,11 +67,21 @@ def load_lit_edges() -> Iterable[Tuple[List[Tuple[float, float]], bool]]:
             avg_lamp_by_osmid[osmid] = avg_lamp_by_osmid.get(osmid, 0.0) + lamp_per_km
             count_by_osmid[osmid] = count_by_osmid.get(osmid, 0) + 1
 
-    lit_osmids = {
-        osmid
+    return {
+        osmid: (total / count_by_osmid[osmid]) > 0
         for osmid, total in avg_lamp_by_osmid.items()
-        if (total / count_by_osmid[osmid]) > 0
     }
+
+
+def load_lit_edges() -> Iterable[Tuple[List[Tuple[float, float]], bool]]:
+    """
+    Joins edge_features.csv and edge_lamp_features.csv on osmid. Yields
+    (coords, is_lit) pairs for every LIT edge only (unlit edges aren't
+    needed - the scoring logic below only cares about proximity to lit
+    streets, not unlit ones).
+    """
+    lamp_status = load_lamp_status_by_osmid()
+    lit_osmids = {osmid for osmid, is_lit in lamp_status.items() if is_lit}
 
     with open(EDGE_FEATURES_PATH, newline="") as f:
         for row in csv.DictReader(f):
@@ -79,6 +96,38 @@ def load_lit_edges() -> Iterable[Tuple[List[Tuple[float, float]], bool]]:
             except (KeyError, ValueError):
                 continue
             yield coords, True
+
+
+def load_unlit_edges() -> Iterable[Tuple[List[Tuple[float, float]], str]]:
+    """
+    Like load_lit_edges(), but the inverse: yields (coords, osmid) for
+    every osmid with EXPLICIT unlit evidence (a row in
+    edge_lamp_features.csv whose average lamp_per_km is <= 0) - not merely
+    an osmid that's absent from the file. Absence means "no data", which
+    is a different thing from "confirmed unlit"; this function only
+    reports the latter, since it's meant for visualizing what the data
+    actually asserts, not for the "assume lit by default" convention used
+    when building the routing cost (see build_safety_factors.py).
+
+    Used by build_safety_geojson.py to render a "confirmed unlit" layer
+    alongside the safety-tag layer.
+    """
+    lamp_status = load_lamp_status_by_osmid()
+    unlit_osmids = {osmid for osmid, is_lit in lamp_status.items() if not is_lit}
+
+    with open(EDGE_FEATURES_PATH, newline="") as f:
+        for row in csv.DictReader(f):
+            osmid = row["osmid"]
+            if osmid not in unlit_osmids:
+                continue
+            try:
+                coords = [
+                    (float(row["u_lat"]), float(row["u_lng"])),
+                    (float(row["v_lat"]), float(row["v_lng"])),
+                ]
+            except (KeyError, ValueError):
+                continue
+            yield coords, osmid
 
 
 def build_grid() -> None:

@@ -1,11 +1,18 @@
 """
 Thin proxy sitting between the web-app frontend and Valhalla.
 
-For every incoming /route request, it merges in the precomputed
-`linear_cost_factors` (built by build_safety_factors.py from your ML
-model's output) and forwards the request to the real Valhalla server.
-Valhalla's own pathfinding then does the safety-aware routing - this proxy
-does no scoring or reranking itself, it just injects the penalties.
+For every incoming /route request, it merges in the precomputed safety +
+lighting factors (built by build_safety_factors.py) into `linear_cost_factors`
+and forwards the request to the real Valhalla server. Valhalla's own
+pathfinding then does the safety/lighting-aware routing - this proxy does
+no scoring or reranking itself, it just injects the penalties.
+
+safety_factors.json stores each edge's safety_factor and lighting_factor
+SEPARATELY rather than a single combined number, because the lighting half
+can be switched off per-request via an `is_daylight` flag on the incoming
+payload (default False - i.e. lighting penalty active unless the caller
+says it's daylight). `is_daylight` is stripped before forwarding to
+Valhalla, which knows nothing about it.
 
 Run standalone for local testing:
     uvicorn app:app --reload --port 5000
@@ -98,6 +105,11 @@ def _bboxes_overlap(a: Tuple[float, float, float, float], b: Tuple[float, float,
 
 
 def _inject_safety_factors(payload: dict) -> dict:
+    # is_daylight is our own field, not Valhalla's - pop it (not get) so it
+    # never gets forwarded upstream. Default False: lighting penalty is
+    # active unless the caller explicitly says it's daylight.
+    is_daylight = bool(payload.pop("is_daylight", False))
+
     if not _factor_index:
         return payload
 
@@ -112,10 +124,24 @@ def _inject_safety_factors(payload: dict) -> dict:
     ]
 
     if relevant:
+        # Combine the precomputed safety_factor and lighting_factor into
+        # the single "factor" Valhalla actually expects, here at request
+        # time - this is what lets is_daylight skip the lighting half
+        # without needing a separate prebuilt file.
+        computed = [
+            {
+                "shape": entry["shape"],
+                "factor": round(
+                    entry["safety_factor"] * (1.0 if is_daylight else entry["lighting_factor"]),
+                    3,
+                ),
+            }
+            for entry in relevant
+        ]
         # If the incoming request already specifies its own
         # linear_cost_factors, don't silently clobber them - extend instead.
         existing = payload.get("linear_cost_factors", [])
-        payload["linear_cost_factors"] = existing + relevant
+        payload["linear_cost_factors"] = existing + computed
 
     return payload
 

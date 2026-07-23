@@ -46,7 +46,27 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------
-  # 3) The Valhalla demo web-app (React/Vite), pointed at the reranker
+  # 3) safety_map.html - a debug/QA map (Leaflet) showing exactly what the
+  #    safety + lighting model flagged, straight from safety_edges.json
+  #    (built by build_safety_geojson.py). Served with nginx purely as a
+  #    static file host - reranker/ is mounted read-only, and
+  #    nginx-safety-map.conf maps "/" to safety_map.html so this comes up
+  #    directly at http://localhost:8080/ with no extra path needed.
+  # ---------------------------------------------------------------------
+  safety_map:
+    image: nginx:alpine
+    container_name: safety_map
+    volumes:
+      - ./reranker:/usr/share/nginx/html:ro
+      - ./nginx-safety-map.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8080:80"
+    depends_on:
+      - reranker
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------
+  # 4) The Valhalla demo web-app (React/Vite), pointed at the reranker
   #    instead of directly at Valhalla, so it transparently gets back
   #    safety-reranked routes.
   #    Assumes you've cloned https://github.com/valhalla/web-app as a

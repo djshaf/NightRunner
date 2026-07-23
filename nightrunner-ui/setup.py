@@ -31,6 +31,7 @@ else:
 SAFE_ROUTING_DIR = SCRIPT_DIR / "safe-routing"
 WEB_APP_DIR = SCRIPT_DIR / "web-app"
 APP_URL = "http://localhost:3000"
+SAFETY_MAP_URL = "http://localhost:8080"
 
 DOCKER_INSTALL_URL = "https://www.docker.com/products/docker-desktop/"
 
@@ -100,7 +101,7 @@ def _port_is_free(port: int) -> bool:
 
 
 def check_ports_available() -> None:
-    busy = [p for p in (3000, 5050, 8002) if not _port_is_free(p)]
+    busy = [p for p in (3000, 5050, 8002, 8080) if not _port_is_free(p)]
     if busy:
         print(
             f"NOTE: port(s) {', '.join(str(p) for p in busy)} already have something "
@@ -132,22 +133,34 @@ def build_and_start() -> None:
         _fail("Starting the containers failed - scroll up to see the error from Docker above.")
 
 
-def wait_until_ready(timeout_s: int = 180) -> bool:
+def _url_is_ready(url: str) -> bool:
     import urllib.request
+    try:
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
 
+
+def wait_until_ready(timeout_s: int = 180) -> tuple:
+    """Waits for both the main app and the safety map to respond. Returns
+    (app_ready, safety_map_ready) - each independently, so one being slow
+    doesn't block reporting the other as ready."""
     print("Waiting for the app to finish starting up...")
     deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        try:
-            with urllib.request.urlopen(APP_URL, timeout=3) as resp:
-                if resp.status == 200:
-                    return True
-        except Exception:
-            pass
+    app_ready = False
+    map_ready = False
+    while time.time() < deadline and not (app_ready and map_ready):
+        if not app_ready:
+            app_ready = _url_is_ready(APP_URL)
+        if not map_ready:
+            map_ready = _url_is_ready(SAFETY_MAP_URL)
+        if app_ready and map_ready:
+            break
         print(".", end="", flush=True)
         time.sleep(3)
     print()
-    return False
+    return app_ready, map_ready
 
 
 def main() -> None:
@@ -172,19 +185,33 @@ def main() -> None:
     build_and_start()
 
     _print_step(6, total_steps, "Waiting for it to be ready...")
-    ready = wait_until_ready()
+    app_ready, map_ready = wait_until_ready()
 
     print("\n" + "=" * 60)
-    if ready:
-        print(f"All set! Opening {APP_URL} in your browser now.")
+    if app_ready and map_ready:
+        print(f"All set! Opening {APP_URL} and {SAFETY_MAP_URL} in your browser now.")
         print("=" * 60)
         webbrowser.open(APP_URL)
+        webbrowser.open(SAFETY_MAP_URL)
     else:
+        # Open whichever ones actually came up rather than nothing -
+        # no reason to make the user wait on both if only one is slow.
+        if app_ready:
+            print(f"Opening {APP_URL} now.")
+            webbrowser.open(APP_URL)
+        if map_ready:
+            print(f"Opening {SAFETY_MAP_URL} now.")
+            webbrowser.open(SAFETY_MAP_URL)
+        missing = []
+        if not app_ready:
+            missing.append(APP_URL)
+        if not map_ready:
+            missing.append(SAFETY_MAP_URL)
         print(
-            "The app is taking longer than expected to start. It may still be\n"
-            f"finishing up - try opening {APP_URL} in your browser in a minute,\n"
-            "or run 'docker compose logs' inside the safe-routing folder to see\n"
-            "what's happening."
+            f"{' and '.join(missing)} took longer than expected to start. "
+            "It/they may still be\nfinishing up - try opening in your browser "
+            "in a minute, or run 'docker compose logs'\ninside the safe-routing "
+            "folder to see what's happening."
         )
         print("=" * 60)
 
