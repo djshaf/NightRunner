@@ -57,13 +57,12 @@ Raena Fadzil\\
 
 %%%%%%%%% ABSTRACT
 \begin{abstract}
-   The abstract for your project goes here. The length of the abstract should be between 200-250 words. Tips for writing a good abstract can be found at \url{https://qmplus.qmul.ac.uk/mod/book/view.php?id=3310704&chapterid=323502}.
-   
+
 Can personal safety be treated as a primary objective in pedestrian route planning, rather than an afterthought to distance and time? Mainstream running and navigation apps optimise almost entirely for speed, leaving solo runners, especially after dark, to judge safety for themselves. This project addresses that gap by building and deploying a safety-first, lighting-aware routing tool for the London Borough of Camden. 
 
 On the data side, open records of crime, stop-and-search, and street lighting are attached to an OpenStreetMap street graph at the level of individual streets. Each crime is scored in two complementary ways, by legal severity and by perceived risk, drawing on the Cambridge Crime Harm Index and the Signal Crimes Perspective, and its influence is spread along the walkable network using a Network-Based Kernel Density Estimate that respects the anonymised resolution of the police data.
 
-After procesing the data is passed through an XGBoost Regressor using spatial-temporal lags and infrastructure metadata received to forecast street-level risk (percieved). Model employs tweedie deviance for zero-inflated, right-skewed distribution seen in this localization. These continuous values are then scaled and integrated with lighting penalties, to be fed into the pathfinding algorithm for optimal, safe routing. 
+After processing, the data is passed through an XGBoost Regressor using spatial-temporal lags and infrastructure metadata received to forecast street-level risk (perceived). The model employs Tweedie deviance for a zero-inflated, right-skewed distribution seen in this localisation. These continuous values are then scaled and integrated with lighting penalties to be fed into the pathfinding algorithm for optimal, safe routing. 
 
 \textbf{<PLACEHOLDER - Rae’s input on the routing integration and front-end>}
 
@@ -92,9 +91,9 @@ These studies establish that safety-first, data-driven routing is both feasible 
 
 \subsection{Data Pipeline}
 
-The first stage is a data pipeline that turns raw open data into a table with one row per street segment. A pedestrian street graph for Camden i downloaded from OpenStreetMap via OSMnx~\cite{boeing2017osmnx}, giving 35{,}532 edges. Onto it we attach three open datasets at edge level: recorded crime and stop-and-search from the UK Police API~\cite{datapoliceuk2026}, and street lighting from Camden Council~\cite{camden2026lighting}. Crime is pulled month by month; since data.police.uk only keeps a rolling window, the pipeline clips the request to whatever is actually published at run time, here 36 months from June 2023 to May 2026.
+The first stage is a data pipeline that turns raw open data into a table with one row per street segment. A pedestrian street graph for Camden is downloaded from OpenStreetMap via OSMnx~\cite{boeing2017osmnx}, giving 35{,}532 edges. Onto it we attach three open datasets at edge level: recorded crime and stop-and-search from the UK Police API~\cite{datapoliceuk2026}, and street lighting from Camden Council~\cite{camden2026lighting}. Crime is pulled month by month; since data.police.uk only keeps a rolling window, the pipeline clips the request to whatever is actually published at run time, here 36 months from June 2023 to May 2026.
 
-We compute two crime weightings per incident, since since ``serious'' and ``frightening'' differ. A \emph{severity} score (1--3) follows the Cambridge Crime Harm Index~\cite{sherman2016cambridge} and the ONS Crime Severity Score~\cite{ons2016severity}; a separate \emph{perceived risk} score (1--4) follows the Signal Crimes Perspective~\cite{innes2004signal,innesfielding2002signal} and ONS survey data~\cite{ons2022csew}, under which visible disorder can outweigh a legally more serious but less visible offence. Each edge's score is the sum of its incidents' weights. Both are deliberate simplifications onto the 14 categories the API exposes, not a full reproduction of either study.
+We compute two crime weightings per incident, since ``serious'' and ``frightening'' differ. A \emph{severity} score (1--3) follows the Cambridge Crime Harm Index~\cite{sherman2016cambridge} and the ONS Crime Severity Score~\cite{ons2016severity}; a separate \emph{perceived risk} score (1--4) follows the Signal Crimes Perspective~\cite{innes2004signal,innesfielding2002signal} and ONS survey data~\cite{ons2022csew}, under which visible disorder can outweigh a legally more serious but less visible offence. Each edge's score is the sum of its incidents' weights. Both are deliberate simplifications onto the 14 categories the API exposes, not a full reproduction of either study.
 \begin{equation*}
 w_c = \begin{cases} 
 4 & \parbox[t]{6cm}{\raggedright Violence, Robbery, Weapons, Theft from Person (Direct Threats)} \\[3ex]
@@ -110,21 +109,21 @@ For an edge $e$ in month $t$, the unadjusted discrete perceived risk sum $R_{e, 
 R_{e, t}^{\text{raw}} = \sum_{i \in I_{e,t}} w_{c(i)}
 \end{equation*}
 
-Police coordinates are anonymised to fixed snap points roughly 125\,m apart in Camden, so assigning a crime to one nearest street would be misleadingly precise. Instead each incident's weight is spread over nearby streets using Network Kernel Density Estimation~\cite{chainey2008hotspot}, with distance measured \emph{along} the walkable graph (Dijkstra shortest paths) rather than in a straight line, so a crime cannot bleed across a wall or the canal. The bandwidth is set to 125\,m to match the anonymisation spacing, and smoothing is done separately per month so future data cannot leak into earlier months.
+Police coordinates are anonymised to fixed snap points roughly 125\,m apart in Camden, so assigning a crime to one nearest street would be misleadingly precise. Instead, each incident's weight is spread over nearby streets using Network Kernel Density Estimation~\cite{chainey2008hotspot}, with distance measured \emph{along} the walkable graph (Dijkstra shortest paths) rather than in a straight line, so a crime cannot bleed across a wall or the canal. The bandwidth is set to 125\,m to match the anonymisation spacing, and smoothing is done separately per month so future data cannot leak into earlier months.
 
-The pipeline outputs two tables. \texttt{edge\_features.csv} holds the crime and stop-and-search features (overall totals, a per-month breakdown, and the per-month NetKDE columns used by the model); \texttt{edge\_lamp\_features.csv} holds the lighting features separately, as lighting is a current snapshot with no monthly history. Both carry the OpenStreetMap way ID and endpoint coordinates so any row traces back to a real place. After cleaning, the dataset holds 230{,}707 crimes, 24{,}644 stop-and-search records, and 15{,}561 lamps. Stop-and-search gender, age, and ethnicity fields were deliberately excluded to avoid encoding demographic bias into a safety score.
+The pipeline outputs two tables. \texttt{edge\_features.csv} holds the crime and stop-and-search features (overall totals, a per-month breakdown, and the per-month NetKDE columns used by the model); \texttt{edge\_lamp\_features.csv} holds the lighting features separately, as lighting is a current snapshot with no monthly history. Both carry the OpenStreetMap way ID and endpoint coordinates, so any row traces back to a real place. After cleaning, the dataset holds 230{,}707 crimes, 24{,}644 stop-and-search records, and 15{,}561 lamps. Stop-and-search gender, age, and ethnicity fields were deliberately excluded to avoid encoding demographic bias into a safety score.
 
 \subsection{Predictive Safety Model}
 
 \subsubsection{Problem Formulation}
 
-The objective of this predictive safety routing system is to compute an optimal and safe path for pedestrians and runners operating at night. Urban street network is modeled as a weighted directed graph $G = (V, E)$, where $V$ represents street intersections (nodes), $E$ represents street segments (edges) ~\cite{LozanoDominguez2021}. Each edge $e = (u, v) \in E$ has a street length $l_e$, spatial geometry, static street infrastructure, and time-series historical crime metrics aggregated at monthly intervals $t \in T$. 
+The objective of this predictive safety routing system is to compute an optimal and safe path for pedestrians and runners operating at night. Urban street network is modelled as a weighted directed graph $G = (V, E)$, where $V$ represents street intersections (nodes), $E$ represents street segments (edges) ~\cite{LozanoDominguez2021}. Each edge $e = (u, v) \in E$ has a street length $l_e$, spatial geometry, static street infrastructure, and time-series historical crime metrics aggregated at monthly intervals $t \in T$. 
 
-The system separates future crime risk prediction from graph pathfinding by utilizing an \textbf{XGBoost Regressor} that estimates future spatial-temporal risk $y_{e, t}$ per street segment. These are then transformed to normalized edge costs $C_e \in [1, 10]$ and integrated into a dynamic graph function that accounts for environmental factors to determine optimal path via Djistra search algorithm. 
+The system separates future crime risk prediction from graph pathfinding by utilising an \textbf{XGBoost Regressor} that estimates future spatial-temporal risk $y_{e, t}$ per street segment. These are then transformed to normalised edge costs $C_e \in [1, 10]$ and integrated into a dynamic graph function that accounts for environmental factors to determine the optimal path via Djistra search algorithm. 
 
 \subsubsection{Network Kernel Density Estimation (NetKDE)}
 
-NetKDE was chosen in order to model risk diffusion along actual pedestrian pathways rather than euclidian space, while eliminating artifacts caused by spatial snapping~\cite{Wu2022}. For each incident $i$ on edge $e$ risk diffuses in walkable paths using Djikstra's shortest-path distance $d_{\text{net}}(e, e')$ with a Gaussian kernel function $K(d_{\text{net}})$ bounded by distance $B = 125\text{ m}$. 
+NetKDE was chosen in order to model risk diffusion along actual pedestrian pathways rather than Euclidean space, while eliminating artefacts caused by spatial snapping~\cite{Wu2022}. For each incident $i$ on edge $e$, risk diffuses in walkable paths using Dijkstra's shortest-path distance $d_{\text{net}}(e, e')$ with a Gaussian kernel function $K(d_{\text{net}})$ bounded by a distance $B = 125\text{ m}$. 
 \begin{align*}
 K(d_{\text{net}}) &= \exp\left( -\frac{1}{2} \left( \frac{d_{\text{net}}}{\sigma} \right)^2 \right), \\
 &\quad \text{where } \sigma = \frac{B}{3} = \frac{125}{3} \approx 41.67\text{ m}
@@ -138,7 +137,7 @@ y_{e, t} = \text{target\_perceived\_risk}_{e,t} = \sum_{e' \in \mathcal{N}_B(e)}
 
 \subsubsection{Feature Engineering}
 
-As UK police API is subject to a 2-month lag, predictive feature strictly omits real-time figures. Input feature vector $\mathbf{x}_{e, t}$ for edge $e$ at prediction time $t$ is as follows: 
+As UK police API is subject to a 2-month lag, the predictive feature strictly omits real-time figures. Input feature vector $\mathbf{x}_{e, t}$ for edge $e$ at prediction time $t$ is as follows: 
 
 \begin{align*}
 \mathbf{x}_{e, t} = \Big[ &L_2(y_{e,t}), L_3(y_{e,t}), L_4(y_{e,t}), L_2(S_{e,t}), \\
@@ -160,8 +159,8 @@ Where:
 XGBoost was selected over alternative models mainly due to three main reasons:
 \begin{enumerate}
     \item Tree-based gradient boosting outperforms GNNs and deep learning architectures on heterogeneous tabular datasets with dense scalar lag features~\cite{Wu2022}.
-    \item Native support for categorical features via numerical splits without expanding feature dimentionality.
-    \item Fast prediction latency enabling faster scoring if more frequent data was to be obtained. 
+    \item Native support for categorical features via numerical splits without expanding feature dimensionality.
+    \item Fast prediction latency enabling faster scoring if more frequent data were to be obtained. 
 \end{enumerate}
 
 The model fits an ensemble of $K$ additive decision trees:
@@ -170,15 +169,15 @@ The model fits an ensemble of $K$ additive decision trees:
 \mathcal{L}(\Theta) = \sum_{e, t} d\left( y_{e,t}, \hat{y}_{e,t} \right) + \sum_{k=1}^K \Omega(f_k)
 \end{equation*}
 
-where $d$ is the loss function \texttt{reg:tweedie}, a distribution defined by $Var(Y) = \phi \mu^p$ where $p$ is variance power parameter. As $p$ is constrained to  $1 < p < 2$ this turns the model into a compound Poisson-Gama distribution which handles zero-inflated data and positive tails. Tweedie unit deviance is as follows: 
+where $d$ is the loss function \texttt{reg:tweedie}, a distribution defined by $Var(Y) = \phi \mu^p$ where $p$ is variance power parameter. As $p$ is constrained to  $1 < p < 2$, this turns the model into a compound Poisson-Gamma distribution which handles zero-inflated data and positive tails. Tweedie unit deviance is as follows: 
 
 $$d(y, \hat{y}) = 2 \left( \frac{y \hat{y}^{1-p}}{1-p} - \frac{\hat{y}^{2-p}}{2-p} - \frac{y^{2-p}}{(1-p)(2-p)} \right)$$
 
-Regularization term  $\Omega(f_k) = \gamma T_k + \frac{1}{2}\lambda \Vert{}w_k\Vert{}^2$ penalizes tree complexity, which then prevents spatial overfitting and results in better, more conservative splits. 
+Regularisation term  $\Omega(f_k) = \gamma T_k + \frac{1}{2}\lambda \Vert{}w_k\Vert{}^2$ penalises tree complexity, which then prevents spatial overfitting and results in better, more conservative splits. 
 
 \subsubsection{Data Split Strategy}
 
-To evaluate model generalization without any leakages a chronological split is enforced:
+To evaluate model generalisation without any leakages, a chronological split is enforced:
 
 \begin{itemize}
     \item \textbf{Training Set:} Historical records prior to March 2026.
@@ -231,19 +230,19 @@ The data pipeline uses Python with OSMnx~\cite{boeing2017osmnx}, GeoPandas, Shap
 \section{Results and Discussion}
 \subsection{XGBoost Performance}
 
-Training using 1,030,544 edges monthly spanning prior to March 2026, and testing using 106,608 unseen records from March 2026 onwards, the model achieved a MAE of 2.46. Within the context of a continuous spatial-temporal NetKDE perceived risk score this MAE indicates the model can reliably estimate future perceived risk within a tight margin. 
+Training using 1,030,544 edges monthly spanning prior to March 2026, and testing using 106,608 unseen records from March 2026 onwards, the model achieved an MAE of 2.46. Within the context of a continuous spatial-temporal NetKDE perceived risk score this MAE indicates the model can reliably estimate future perceived risk within a tight margin. 
 
-Analysis of the Information Gain reveals that most recent spatial-temporal lags are the most powerful predictors of future crime. The 2-month, 3-month and 5-month NetKDE risk lags provide the highest power, followed by street categorization, geographic coordinates and edge length. Interestingly the stop-search density raned higher than lighting features. 
+Analysis of the Information Gain reveals that most recent spatial-temporal lags are the most powerful predictors of future crime. The 2-month, 3-month and 5-month NetKDE risk lags provide the highest power, followed by street categorisation, geographic coordinates and edge length. Interestingly, the stop-search density ranked higher than lighting features. 
 
 \subsection{Routing Outcomes}
 
-To evaluate whether the model was indeed usable, effective and successful in the main objective as opposed to just the predictive element the algorithm was subjected to a Monte Carlo simulation of 1000 random Origin-Destination pairs across the network. Djikstra's algorithm was compared against ML algorithm with Daytime and Nighttime algorithms (the latter applying a 5 impedance penalty to unlit streets)
+To evaluate whether the model was indeed usable, effective and successful in the main objective as opposed to just the predictive element, the algorithm was subjected to a Monte Carlo simulation of 1000 random Origin-Destination pairs across the network. Dijkstra's algorithm was compared against ML algorithms with Daytime and Nighttime algorithms (the latter applying a 5 impedance penalty to unlit streets)
 
 98.5\% of the 1000 valid simulations actively diverged from the shortest path, proving the algorithm works at a baseline of deviating and affecting the total path. (see Appendix \ref{app:data_tables} for further metrics). 
 
 \subsection{Lighting vs Crime Trade-off}
 
-Night-time routing introduces another objective optimization problem, due to the dark penalty ($\delta = 5.0$) the night time routing achieved a 53.35\% reduction in darkness exposure . However, this comes at a cost of a detour penalty jumping to 23.15\%, and a crime risk reduction metric dropping from 80.46\% to a 63.72\%(see Appendix \ref{app:data_tables}). This drop makes logical sense, as well-lit streets (commercial and nightlife districts) may sometimes suffer from higher base crime rates. The risk reduction is still very sizeable, and this represents a compromise to ensure that routing is significantly safer in a both percieved and physical sense. 
+Night-time routing introduces another objective optimisation problem; due to the dark penalty ($\delta = 5.0$), the night-time routing achieved a 53.35\% reduction in darkness exposure. However, this comes at a cost of a detour penalty jumping to 23.15\%, and a crime risk reduction metric dropping from 80.46\% to 63.72\%(see Appendix \ref{app:data_tables}). This drop makes logical sense, as well-lit streets (commercial and nightlife districts) may sometimes suffer from higher base crime rates. The risk reduction is still very sizeable, and this represents a compromise to ensure that routing is significantly safer in both the perceived and physical sense. 
 
 \subsection{Limitations}
 
@@ -292,13 +291,13 @@ We thank Dr Anum Masood and Stephanie Keddy for their guidance and feedback thro
 The project proposal defined three lead roles:
 
 \begin{itemize}
-\item \textbf{Data Lead - Hongyuan Zhai:} Requirement analysis, and data collection, cleaning, and preparation.
+\item \textbf{Data Lead - Hongyuan Zhai:} Requirement analysis and data collection, cleaning, and preparation.
 \item \textbf{AI Model Lead - David Shafirovich:} AI problem formulation, model implementation, training, testing, and evaluation.
 \item \textbf{Deployment Lead - Raena Fadzil:} front-end application development, model integration with the front-end, and stretch goals.
 \end{itemize}
 
 Each member led their own area as above and wrote the corresponding sections of this report. Where the components met, the feature pipeline into the model, and the model output into the routing engine, the work was shared, and all members reviewed the report for consistency.
-Note: For rubric, refer to the Group Project Guidelines: \url{https://qmplus.qmul.ac.uk/mod/resource/view.php?id=3794535}
+Note: For the rubric, refer to the Group Project Guidelines: \url{https://qmplus.qmul.ac.uk/mod/resource/view.php?id=3794535}
 
 {\small
 \bibliographystyle{ieee}
