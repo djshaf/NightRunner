@@ -248,7 +248,7 @@ The data pipeline uses Python with OSMnx~\cite{boeing2017osmnx}, GeoPandas, Shap
 \section{Results and Discussion}
 \subsection{XGBoost Performance}
 
-Training using 1,030,544 edges monthly spanning prior to March 2026, and testing using 106,608 unseen records from March 2026 onwards, the model achieved an MAE of 2.46. Within the context of a continuous spatial-temporal NetKDE perceived risk score this MAE indicates the model can reliably estimate future perceived risk within a tight margin. 
+Training using 1,030,544 edges monthly spanning prior to March 2026, and testing using 106,608 unseen records from March 2026 onwards, the model achieved an MAE of 2.44. Within the context of a continuous spatial-temporal NetKDE perceived risk score this MAE indicates the model can reliably estimate future perceived risk within a tight margin. 
 
 Analysis of the Information Gain reveals that most recent spatial-temporal lags are the most powerful predictors of future crime. The 2-month, 3-month and 5-month NetKDE risk lags provide the highest power, followed by street categorisation, geographic coordinates and edge length. Interestingly, the stop-search density ranked higher than lighting features. 
 
