@@ -33,15 +33,15 @@
 \title{\LaTeX\ ECS7036P - An AI Approach to Running Route Optimisation for Safety}
 
 \author{David Shafirovich\\
-200349804\\
+{\small200349804\\}
 {\tt\small d.j.shafirovich@se25.qmul.ac.uk}
 \and
 Hongyuan Zhai\\
-260019183\\
+{\small260019183\\}
 {\tt\small h.zhai@se25.qmul.ac.uk}
 \and
 Raena Fadzil\\
-250988321\\
+{\small250988321\\}
 {\tt\small r.fadzil@se25.qmul.ac.uk}
 }
 
@@ -62,11 +62,9 @@ Can personal safety be treated as a primary objective in pedestrian route planni
 
 On the data side, open records of crime, stop-and-search, and street lighting are attached to an OpenStreetMap street graph at the level of individual streets. Each crime is scored in two complementary ways, by legal severity and by perceived risk, drawing on the Cambridge Crime Harm Index and the Signal Crimes Perspective, and its influence is spread along the walkable network using a Network-Based Kernel Density Estimate that respects the anonymised resolution of the police data.
 
-After processing, the data is passed through an XGBoost Regressor using spatial-temporal lags and infrastructure metadata received to forecast street-level risk (perceived). The model employs Tweedie deviance for a zero-inflated, right-skewed distribution seen in this localisation. These continuous values are then scaled and integrated with lighting penalties to be fed into the pathfinding algorithm for optimal, safe routing. 
+After processing, the data is passed through an XGBoost Regressor using spatial-temporal lags and infrastructure metadata received to forecast (perceived) street-level risk. The model employs Tweedie deviance for a zero-inflated, right-skewed distribution seen in this localisation. These continuous values are then scaled and integrated with lighting penalties to be fed into the pathfinding algorithm for optimal, safe routing. 
 
-\textbf{<PLACEHOLDER - Rae’s input on the routing integration and front-end>}
-
-\textbf{<PLACEHOLDER - headline evaluation result>} 
+In a Monte Carlo evaluation of 1,000 random origin-destination pairs across Camden, the recommended route diverged from the shortest path in 98.5\% of cases. Daytime routing reduced crime-risk exposure by 80.46\% for a 7.32\% increase in distance, while night-time routing, which additionally penalises unlit streets, cut darkness exposure by 53.35\% at the cost of a larger 23.15\% detour. The underlying predictive model achieved a mean absolute error of 2.46 on held-out future months.
 
 The result is a working prototype showing that data-driven safety routing is feasible and practically useful for everyday runners.
 
@@ -77,9 +75,9 @@ The result is a working prototype showing that data-driven safety routing is fea
 
 Running participation in the UK has grown steadily in recent years, and events such as the London Marathon now attract record numbers of applicants. Running is one of the most accessible forms of exercise, requiring no gym membership or specialist equipment, and is widely recognised for its mental health benefits alongside its physical ones. Existing running and journey-planning apps, however, optimise almost exclusively for distance or time. Neither category of app treats personal safety as a crucial routing objective, despite safety being a commonly cited concern for solo runners, after dark or in unfamiliar cities.
 
-This project addresses that gap by building a safety-first and street-lighting-aware pedestrian routing tool, scoped to the London Borough of Camden as a case study. The system attaches risk-related features derived from open crime, stop-and-search, and street lighting data to a street-level graph, trains a predictive model on that history, and injects the resulting risk estimates directly into a production-grade routing engine (Valhalla) so that riskier streets are naturally avoided where a reasonable alternative exists. A companion lighting indicator, based on current streetlight coverage rather than a trained prediction, is shown alongside each route for the user's own judgement, particularly relevant for evening use.
+This project addresses that gap by building a safety-first and street-lighting-aware pedestrian routing tool, scoped to the London Borough of Camden as a case study. The system attaches risk-related features derived from open crime, stop-and-search, and street lighting data to a street-level graph, trains a predictive model on that history. The resulting risk estimates are injected directly into a production-grade routing engine (Valhalla), alongside current streetlight coverage information, so that riskier streets are naturally avoided where a reasonable alternative exists. Two separate indicators for safety and lighting are shown alongside each route for the user's own judgement.
 
-The remainder of this report describes prior work in safety-aware routing (Section 2), the data pipeline, predictive model, and routing integration that were actually built (Section 3), the datasets, software, and hardware involved (Section 4), the current state of evaluation together with an honest account of what remains outstanding against the project proposal (Section 5), and our conclusions and remaining contributions (Sections 6-8).
+The remainder of this report describes prior work in safety-aware routing (Section 2), the data pipeline, predictive model, and routing integration that were actually built (Section 3), the datasets, software, and hardware involved (Section 4), the current state of evaluation together with an honest account of what remains outstanding against the project methodology (Section 5), and finally our conclusions, acknowledgements and contributions (Sections 6-8).
 
 \section{Related Work}
 
@@ -204,18 +202,39 @@ To evaluate model generalisation without any leakages, a chronological split is 
 \end{itemize}
 
 \subsection{Routing Integration}
+\label{sec:routing-integration}
 
-Rather than implementing a custom path-finding algorithm, the risk tags produced by the model are converted into cost multipliers and supplied to Valhalla~\cite{valhalla2026}, an open-source routing engine, via its native \texttt{linear\_cost\_factors} request parameter. Each flagged street's multiplier is computed as
-\[
-\text{multiplier} = 1 + \text{SCALE} \times (\text{tag} - 1),
-\]
-where SCALE is a single tunable constant. Streets at the baseline tag (the large majority of the network) receive no multiplier and are omitted from the request entirely, keeping each request small. Valhalla's existing shortest-path search then naturally prefers routes that avoid heavily-multiplied streets where a reasonable detour exists, while still permitting a short traversal of a risky street when no reasonable alternative is available, since the engine is minimising a distorted notion of distance rather than obeying a hard exclusion rule.
+Rather than implementing a custom path-finding algorithm, the risk tags produced by the model and the raw lighting dataset are converted into cost multipliers and supplied to Valhalla~\cite{valhalla2026}, an open-source routing engine, via its native \texttt{linear\_cost\_factors} request parameter. For a street edge with risk tier $\text{tag} \in \{1, \ldots, 11\}$ and lit status $\text{lit} \in \{0, 1\}$, the two multipliers are
+
+\begin{equation*}
+\text{safety\_factor}(\text{tag}) = 1 + \text{SCALE}_{\text{safety}} \cdot \max(0, \text{tag} - 1)
+\end{equation*}
+
+\begin{equation*}
+\text{lighting\_factor}(\text{lit}) =
+\begin{cases}
+1 & \text{if lit} = 1 \\
+1 + \text{SCALE}_{\text{light}} & \text{if lit} = 0
+\end{cases}
+\end{equation*}
+
+with $\text{SCALE}_{\text{safety}} = 3$ and $\text{SCALE}_{\text{light}} = 2$, tunable constants. The two combine multiplicatively into the single factor submitted per edge, with the lighting term collapsing to 1 whenever a request is flagged as daylight (\texttt{is\_daylight}, default \texttt{FALSE}):
+
+\begin{equation*}
+\text{factor} = \text{safety\_factor}(\text{tag}) \times
+\begin{cases}
+1 & \text{if is\_daylight} \\
+\text{lighting\_factor}(\text{lit}) & \text{otherwise}
+\end{cases}
+\end{equation*}
+
+Edges at baseline on both dimensions (factor = 1, the large majority of the network) are omitted from the request entirely, keeping each request small. Valhalla's existing shortest-path search then naturally prefers routes that avoid heavily-penalised streets where a reasonable detour exists, while still permitting a short traversal of a risky or unlit street when no reasonable alternative is available, since the engine is minimising a distorted notion of distance rather than obeying a hard exclusion rule.
 
 \subsubsection*{Safety Score}
 A separate, purely descriptive \textbf{safety score} (0-100) is computed \emph{after} routing, by measuring what proportion of a returned route's length passes within a fixed proximity radius of a flagged street; this score has no influence on which route is chosen; it exists to communicate, in an interpretable way, how much residual exposure a given route carries.
 
 \subsubsection*{Lighting Indicator}
-A second, independently displayed \textbf{lighting score} (0-100) reports what proportion of a route's length passes near a currently lit street, based directly on the raw lamp dataset rather than a trained forecast. It was deliberately kept out of the routing cost function and out of the automatic ``recommended route'' selection, so that the routing decision continues to optimise for the modelled safety objective alone; the lighting score is intended as an at-a-glance signal for the user's own judgement, particularly for evening or night-time use.
+A second, independently displayed \textbf{lighting score} (0-100) reports what proportion of a route's length passes near a currently lit street, based directly on the raw lamp dataset rather than a trained forecast. This descriptive measure is computed from proximity to lit streets along the already-chosen route, and, like the safety score, has no influence on which route is chosen or on the automatic ``recommended route'' selection (Section~\ref{sec:routing-engine}), which evaluates only the descriptive safety score. It is a separate signal from the lighting \emph{penalty} defined above: one shapes which route Valhalla proposes, the other simply reports on whichever route was returned.
 
 \section{Experiments}
 
@@ -224,9 +243,6 @@ The street network, crime, stop-and-search, and lighting data are all scoped to 
 
 \subsection{Software}
 The data pipeline uses Python with OSMnx~\cite{boeing2017osmnx}, GeoPandas, Shapely, pandas, and pyproj. The predictive model uses XGBoost. The routing engine is Valhalla~\cite{valhalla2026}, run inside Docker alongside a Python (FastAPI) proxy service that injects the safety cost factors into each routing request and computes the descriptive safety and lighting scores. The frontend is a React/MapLibre web application (adapted from Valhalla's own reference web app) presenting routes, scores, and turn-by-turn directions to the user.
-
-\subsection{Hardware}
-\textbf{<PLACEHOLDER>}
 
 \section{Results and Discussion}
 \subsection{XGBoost Performance}
@@ -254,17 +270,20 @@ Night-time routing introduces another objective optimisation problem; due to the
     \item \textbf{Static Time-of-Day:} Currently the switch is on a binary toggle, a more granular time-dependent transitional weighting during dusk and dawn would fit better, but also be computationally prohibitive. 
 \end{enumerate}
 
-\subsection{<PLACEHOLDER>}
+\subsection{Routing Engine}
+\label{sec:routing-engine}
 
-\textbf{<PLACEHOLDER - re. Routing UI>} The SCALE parameter controls a genuine trade-off: a street with a 4$\times$ multiplier is treated as roughly four times its real length, so the engine takes a detour only when a genuinely shorter alternative exists, whereas a street with a much higher multiplier (up to 31$\times$ at the highest observed risk tag during development) is avoided far more readily, but the engine will still traverse a short high-risk stretch rather than accept an extremely long detour, since it is minimising a distorted distance rather than applying a hard exclusion. A ``recommended route'' selection was also implemented on top of the three routes Valhalla returns per request: by default the fastest route is recommended, but if its descriptive safety score falls below a threshold, the fastest route within a 20\% time budget that clears the threshold is recommended instead.
+The frontend is a React/MapLibre application adapted from Valhalla's reference web app, presenting each returned route as a tile showing distance, time, a descriptive safety score, and a descriptive lighting score, with the same information available on hover over the route line itself. A user-facing day/night toggle exists to simulate responsive behaviour depending on the time of day, setting the \texttt{is\_daylight} flag described in Section~\ref{sec:routing-integration}; it defaults to \texttt{FALSE}, simulating user behaviour after dark.
 
-Figures~\ref{fig:ui-screenshot-1} and~\ref{fig:ui-screenshot-2} are placeholders for screenshots of the working interface and should be replaced with real captures of the deployed application before submission.
+In practice, the SCALE constants (Section~\ref{sec:routing-integration}) control a genuine trade-off: a street with a 4$\times$ safety multiplier is treated as roughly four times its real length, so the engine takes a detour only when a genuinely shorter alternative exists, whereas the highest-risk streets (up to 31$\times$ at tag 11) are avoided far more readily, though the engine will still traverse a short high-risk stretch rather than accept an extremely long detour, since it is minimising a distorted distance rather than applying a hard exclusion. A maximally risky, unlit street is penalised up to roughly 93$\times$ (31 safety $\times$ 3 lighting) when the lighting penalty is active.
+
+A ``recommended route'' selection was also implemented on top of the three routes Valhalla returns per request. By default the fastest route is recommended, but if its descriptive safety score falls below a threshold, the fastest route within a 20\% time budget that clears the threshold is recommended instead.
 
 \begin{figure}[t]
 \begin{center}
    \includegraphics[width=0.8\linewidth]{figures/ui-screenshot-1.png}
 \end{center}
-   \caption{Placeholder - replace with a screenshot of the route summary panel, showing distance, time, safety score, and lighting score for a suggested route.}
+   \caption{The adapted Valhalla route recommender, showing distance, time, safety score, and lighting score for a suggested route.}
 \label{fig:ui-screenshot-1}
 \end{figure}
 
@@ -272,19 +291,18 @@ Figures~\ref{fig:ui-screenshot-1} and~\ref{fig:ui-screenshot-2} are placeholders
 \begin{center}
    \includegraphics[width=0.8\linewidth]{figures/ui-screenshot-2.png}
 \end{center}
-   \caption{Placeholder - replace with a screenshot of the safety map viewer, showing flagged streets overlaid on the Camden street network.}
+   \caption{The safety map viewer, showing flagged streets overlaid on the Camden street network.}
 \label{fig:ui-screenshot-2}
 \end{figure}
 
 \section{Conclusions}
 
-\textbf{<PLACEHOLDER - comparisons and evaluation>}
-This project delivers a working, deployable prototype: a pedestrian router for Camden that prioritises safety, built by attaching a predictive crime-risk model's output to a production routing engine's native costing mechanism.
+Against the project proposal's goal of a data-driven, deployable safety router, the evaluation shows the system does more than passively score routes. 98.5\% of simulated journeys actively diverged from the shortest path, and daytime routing achieved an 80.46\% reduction in crime-risk exposure for a modest 7.32\% distance cost, with night-time routing trading a larger detour for a 53.35\% reduction in darkness exposure. This project delivers a working, deployable prototype: a pedestrian router for Camden that prioritises safety, built by attaching a predictive crime-risk model's output and lighting coverage data to a production routing engine's native costing mechanism.
 
 \section{Acknowledgements}
 
 This project relies entirely on publicly available data and open-source software. We acknowledge OpenStreetMap and its contributors~\cite{osm2026}, the UK Police open data initiative~\cite{datapoliceuk2026}, the London Borough of Camden's open data portal~\cite{camden2026lighting}, the Valhalla routing engine and its contributors~\cite{valhalla2026}, and the BBBike extract service~\cite{bbbike2026}.
-We thank Dr Anum Masood and Stephanie Keddy for their guidance and feedback throughout the project.
+We thank Dr Anum Masood, Stephanie Keddy and Mohamed Hamza Bandukara for their guidance, support and feedback throughout the project.
 
 \section{Contributions}
 
@@ -297,7 +315,6 @@ The project proposal defined three lead roles:
 \end{itemize}
 
 Each member led their own area as above and wrote the corresponding sections of this report. Where the components met, the feature pipeline into the model, and the model output into the routing engine, the work was shared, and all members reviewed the report for consistency.
-Note: For the rubric, refer to the Group Project Guidelines: \url{https://qmplus.qmul.ac.uk/mod/resource/view.php?id=3794535}
 
 {\small
 \bibliographystyle{ieee}
