@@ -1,8 +1,8 @@
 **Module:** ECS7036P
 **Group:** 8
-**Script:** `run_data_pipeline.py`
 
 # Data Collection and Cleaning
+**Script:** `run_data_pipeline.py`
 
 ## Purpose
 
@@ -91,23 +91,28 @@ One file in the output directory: osm_safety_tags.csv. This contains only the ed
 
 # Running the UI (nightrunner-ui)
 
-A safety- and lighting-aware pedestrian routing tool built on [Valhalla](https://github.com/valhalla/valhalla) for Camden, in the `nightrunner-ui/` folder.
+A safety and street-lighting-aware pedestrian routing tool built on [Valhalla](https://github.com/valhalla/valhalla) for the Camden borough, in the `nightrunner-ui/` folder.
 
 ## Requirement
 
-Docker Desktop must be installed and running first: https://www.docker.com/products/docker-desktop/. Everything else (Python, Node) runs inside it automatically - nothing else to install.
+Docker Desktop must be installed and running first: https://www.docker.com/products/docker-desktop/. Everything else (Python, Node) runs inside it automatically. Nothing else to install.
 
 ## Setup
 
-**Mac:** double-click `nightrunner-ui/setup.command`. First time, macOS will block it as from an "unidentified developer" - right-click it, choose Open, then Open again in the dialog. Only needed once.
+**Mac:** double-click `nightrunner-ui/setup.command`. First time, macOS will block it as from an "unidentified developer". Right-click it, choose Open, then Open again in the dialog. Only needed once.
 
-**Windows:** download `NightRunnerSetup.exe` from the Releases page and double-click it (no Python needed). First time, Windows may warn "Windows protected your PC" (SmartScreen) - click More info, then Run anyway. Alternatively, double-click `nightrunner-ui/setup.bat` if Python is already installed.
+**Windows:** download `NightRunnerSetup.exe` from the Releases page and double-click it (no Python needed). First time, Windows may warn "Windows protected your PC" (SmartScreen). Click More info, then Run anyway. Alternatively, double-click `nightrunner-ui/setup.bat` if Python is already installed.
 
-The script checks Docker, builds and starts everything, then opens http://localhost:3000 automatically. Safe to re-run any time.
+The script checks Docker, builds and starts everything, then opens two browser tabs once ready:
+- http://localhost:3000 - the routing app itself (pick start/end points, get a safety and lighting-weighted route)
+- http://localhost:8080 - a debug/QA map of the underlying model's output: streets above the safety-risk baseline, and streets confirmed unlit, as two independently toggleable layers
+
+Safe to re-run any time.
 
 ## If it doesn't work
 
-Make sure Docker Desktop is actually open and ready, and check nothing else is using ports 3000, 5050, or 8002. For anything else, run `docker compose logs` inside `nightrunner-ui/safe-routing`.
+Make sure Docker Desktop is actually open and ready, and check nothing else is using ports 3000, 5050, 8002, or 8080. For anything else, run `docker compose logs` inside `nightrunner-ui/safe-routing`.
+
 
 ---
 
