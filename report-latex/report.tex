@@ -229,7 +229,32 @@ The data pipeline uses Python with OSMnx~\cite{boeing2017osmnx}, GeoPandas, Shap
 \textbf{<PLACEHOLDER>}
 
 \section{Results and Discussion}
+\subsection{XGBoost Performance}
 
+Training using 1,030,544 edges monthly spanning prior to March 2026, and testing using 106,608 unseen records from March 2026 onwards, the model achieved a MAE of 2.46. Within the context of a continuous spatial-temporal NetKDE perceived risk score this MAE indicates the model can reliably estimate future perceived risk within a tight margin. 
+
+Analysis of the Information Gain reveals that most recent spatial-temporal lags are the most powerful predictors of future crime. The 2-month, 3-month and 5-month NetKDE risk lags provide the highest power, followed by street categorization, geographic coordinates and edge length. Interestingly the stop-search density raned higher than lighting features. 
+
+\subsection{Routing Outcomes}
+
+To evaluate whether the model was indeed usable, effective and successful in the main objective as opposed to just the predictive element the algorithm was subjected to a Monte Carlo simulation of 1000 random Origin-Destination pairs across the network. Djikstra's algorithm was compared against ML algorithm with Daytime and Nighttime algorithms (the latter applying a 5 impedance penalty to unlit streets)
+
+98.5\% of the 1000 valid simulations actively diverged from the shortest path, proving the algorithm works at a baseline of deviating and affecting the total path. (see Appendix \ref{app:data_tables} for further metrics). 
+
+\subsection{Lighting vs Crime Trade-off}
+
+Night-time routing introduces another objective optimization problem, due to the dark penalty ($\delta = 5.0$) the night time routing achieved a 53.35\% reduction in darkness exposure . However, this comes at a cost of a detour penalty jumping to 23.15\%, and a crime risk reduction metric dropping from 80.46\% to a 63.72\%(see Appendix \ref{app:data_tables}). This drop makes logical sense, as well-lit streets (commercial and nightlife districts) may sometimes suffer from higher base crime rates. The risk reduction is still very sizeable, and this represents a compromise to ensure that routing is significantly safer in a both percieved and physical sense. 
+
+\subsection{Limitations}
+
+\begin{enumerate}
+    \item \textbf{Temporal \& Spatial Aggregation:}
+    \item \textbf{Subjectivity:}
+    \item \textbf{Lighting Limitations:}
+    \item \textbf{Static Time-of-Day:}
+\end{enumerate}
+
+\subsection{<PLACEHOLDER>}
 \textbf{<PLACEHOLDER>}
 
 \textbf{<PLACEHOLDER - re. Routing UI>} The SCALE parameter controls a genuine trade-off: a street with a 4$\times$ multiplier is treated as roughly four times its real length, so the engine takes a detour only when a genuinely shorter alternative exists, whereas a street with a much higher multiplier (up to 31$\times$ at the highest observed risk tag during development) is avoided far more readily, but the engine will still traverse a short high-risk stretch rather than accept an extremely long detour, since it is minimising a distorted distance rather than applying a hard exclusion. A ``recommended route'' selection was also implemented on top of the three routes Valhalla returns per request: by default the fastest route is recommended, but if its descriptive safety score falls below a threshold, the fastest route within a 20\% time budget that clears the threshold is recommended instead.
@@ -279,5 +304,28 @@ Note: For rubric, refer to the Group Project Guidelines: \url{https://qmplus.qmu
 \bibliographystyle{ieee}
 \bibliography{bibliography.bib}
 }
+
+\onecolumn
+\appendix
+
+\section{Additional Data Tables} \label{app:data_tables}
+
+\begin{table}[h] % Removed the *, forced [h]
+    \centering
+    \caption{Route-Level Safety Evaluation Metrics (n=1,000 O-D Pairs)}
+    \vspace{0.2cm}
+    \begin{tabular}{lccccc}
+        \hline
+        \textbf{Routing Strategy} & \textbf{Avg.\ Distance} & \textbf{Dist.\ Increase} & \textbf{Risk Reduction} & \textbf{Unlit Avoided} & \textbf{Darkness Red.} \\
+        \hline
+        Baseline (Shortest Path) & 3511.4m & N/A & N/A & N/A & N/A \\
+        Daytime ML Routing & 3755.1m & 7.32\% & 80.46\% & -92.8m & -11.63\% \\
+        Nighttime ML Routing & 4335.8m & 23.15\% & 63.72\% & +918.7m & 53.35\% \\
+        \hline
+    \end{tabular}
+    \vspace{0.1cm}
+    
+    \textit{\small (Data derived from the routing evaluation output generated on random seed 42)}
+\end{table}
 
 \end{document}
