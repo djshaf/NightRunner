@@ -63,7 +63,7 @@ Can personal safety be treated as a primary objective in pedestrian route planni
 
 On the data side, open records of crime, stop-and-search, and street lighting are attached to an OpenStreetMap street graph at the level of individual streets. Each crime is scored in two complementary ways, by legal severity and by perceived risk, drawing on the Cambridge Crime Harm Index and the Signal Crimes Perspective, and its influence is spread along the walkable network using a Network-Based Kernel Density Estimate that respects the anonymised resolution of the police data.
 
-\textbf{<PLACEHOLDER - David’s input on the model>} 
+After procesing the data is passed through an XGBoost Regressor using spatial-temporal lags and infrastructure metadata received to forecast street-level risk (percieved). Model employs tweedie deviance for zero-inflated, right-skewed distribution seen in this localization. These continuous values are then scaled and integrated with lighting penalties, to be fed into the pathfinding algorithm for optimal, safe routing. 
 
 \textbf{<PLACEHOLDER - Rae’s input on the routing integration and front-end>}
 
@@ -95,6 +95,20 @@ These studies establish that safety-first, data-driven routing is both feasible 
 The first stage is a data pipeline that turns raw open data into a table with one row per street segment. A pedestrian street graph for Camden i downloaded from OpenStreetMap via OSMnx~\cite{boeing2017osmnx}, giving 35{,}532 edges. Onto it we attach three open datasets at edge level: recorded crime and stop-and-search from the UK Police API~\cite{datapoliceuk2026}, and street lighting from Camden Council~\cite{camden2026lighting}. Crime is pulled month by month; since data.police.uk only keeps a rolling window, the pipeline clips the request to whatever is actually published at run time, here 36 months from June 2023 to May 2026.
 
 We compute two crime weightings per incident, since since ``serious'' and ``frightening'' differ. A \emph{severity} score (1--3) follows the Cambridge Crime Harm Index~\cite{sherman2016cambridge} and the ONS Crime Severity Score~\cite{ons2016severity}; a separate \emph{perceived risk} score (1--4) follows the Signal Crimes Perspective~\cite{innes2004signal,innesfielding2002signal} and ONS survey data~\cite{ons2022csew}, under which visible disorder can outweigh a legally more serious but less visible offence. Each edge's score is the sum of its incidents' weights. Both are deliberate simplifications onto the 14 categories the API exposes, not a full reproduction of either study.
+\begin{equation*}
+w_c = \begin{cases} 
+4 & \parbox[t]{6cm}{\raggedright Violence, Robbery, Weapons, Theft from Person (Direct Threats)} \\[3ex]
+3 & \parbox[t]{6cm}{\raggedright Anti-Social Behaviour, Public Order, Criminal Damage, Drugs (Signal Crimes)} \\[3ex]
+2 & \parbox[t]{6cm}{\raggedright Burglary, Vehicle Crime, Bicycle Theft (Property Crimes)} \\[2ex]
+1 & \parbox[t]{6cm}{\raggedright Shoplifting, Other Theft, Other Crimes (Low Visual Signal)}
+\end{cases}
+\end{equation*}
+
+For an edge $e$ in month $t$, the unadjusted discrete perceived risk sum $R_{e, t}^{\text{raw}}$ is:
+
+\begin{equation*}
+R_{e, t}^{\text{raw}} = \sum_{i \in I_{e,t}} w_{c(i)}
+\end{equation*}
 
 Police coordinates are anonymised to fixed snap points roughly 125\,m apart in Camden, so assigning a crime to one nearest street would be misleadingly precise. Instead each incident's weight is spread over nearby streets using Network Kernel Density Estimation~\cite{chainey2008hotspot}, with distance measured \emph{along} the walkable graph (Dijkstra shortest paths) rather than in a straight line, so a crime cannot bleed across a wall or the canal. The bandwidth is set to 125\,m to match the anonymisation spacing, and smoothing is done separately per month so future data cannot leak into earlier months.
 
@@ -102,14 +116,73 @@ The pipeline outputs two tables. \texttt{edge\_features.csv} holds the crime and
 
 \subsection{Predictive Safety Model}
 
-\textbf{<PLACEHOLDER - David to review/edit>}
+\subsubsection{Problem Formulation}
 
-\subsection{Notes}
+The objective of this predictive safety routing system is to compute an optimal and safe path for pedestrians and runners operating at night. Urban street network is modeled as a weighted directed graph $G = (V, E)$, where $V$ represents street intersections (nodes), $E$ represents street segments (edges). Each edge $e = (u, v) \in E$ has a street length $l_e$, spatial geometry, static street infrastructure, and time-series historical crime metrics aggregated at monthly intervals $t \in T$. 
 
-\subsubsection{Model Architecture \& Objective}
+The system separates future crime risk prediction from graph pathfinding by utilizing an \textbf{XGBoost Regressor} that estimates future spatial-temporal risk $y_{e, t}$ per street segment. These are then transformed to normalized edge costs $C_e \in [1, 10]$ and integrated into a dynamic graph function that accounts for environmental factors to determine optimal path via Djistra search algorithm. 
+
+\subsubsection{Network Kernel Density Estimation (NetKDE)}
+
+NetKDE was chosen in order to model risk diffusion along actual pedestrian pathways rather than euclidian space, while eliminating artifacts caused by spatial snapping. For each incident $i$ on edge $e$ risk diffuses in walkable paths using Djikstra's shortest-path distance $d_{\text{net}}(e, e')$ with a Gaussian kernel function $K(d_{\text{net}})$ bounded by distance $B = 125\text{ m}$. 
+\begin{align*}
+K(d_{\text{net}}) &= \exp\left( -\frac{1}{2} \left( \frac{d_{\text{net}}}{\sigma} \right)^2 \right), \\
+&\quad \text{where } \sigma = \frac{B}{3} = \frac{125}{3} \approx 41.67\text{ m}
+\end{align*}
+
+Continuous training label $y_{e, t}$ for edge $e$ in month $t$ is computed monthly so that we prevent data leakage. 
+
+\begin{equation*}
+y_{e, t} = \text{target\_perceived\_risk}_{e,t} = \sum_{e' \in \mathcal{N}_B(e)} R_{e', t}^{\text{raw}} \cdot K(d_{\text{net}}(e, e'))
+\end{equation*}
+
+\subsubsection{Feature Engineering}
+
+As UK police API is subject to a 2-month lag, predictive feature strictly omits real-time figures. Input feature vector $\mathbf{x}_{e, t}$ for edge $e$ at prediction time $t$ is as follows: 
+
+\begin{align*}
+\mathbf{x}_{e, t} = \Big[ &L_2(y_{e,t}), L_3(y_{e,t}), L_4(y_{e,t}), L_2(S_{e,t}), \\
+&L_3(S_{e,t}), L_4(S_{e,t}), l_e, \text{type}_e, \text{lat}_e, \\
+&\text{lng}_e, \rho_{\text{lamp}}, \text{lit}_e \Big]^T
+\end{align*}
+
+Where:
+
 \begin{itemize}
-    \item \textbf{System:} The system uses an XGBoost Regressor (\texttt{xgb.XGBRegressor}).
-    \item \textbf{Objective Function:} The primary objective function is \texttt{reg:squarederror}, as the model is designed to predict continuous float values representing the NetKDE Perceived Risk score of a street.
+    \item \textbf{Historical Lags ($L_k$):} $L_k(y_{e,t}) = y_{e, t-k}$ represents the NetKDE perceived risk score $k$ months prior ($k \in \{2, 3, 4\}$).
+    \item \textbf{Stop and Search Lags ($S_{e, t-k}$):} $L_k(S_{e,t}) = S_{\text{NetKDE}, e, t-k}$ represents 2, 3, and 4-month lagged NetKDE stop-and-search counts, acting as a proxy for active police presence.
+    \item \textbf{Geometric \& Topological Features:} Edge length $l_e$, highway classification category $\text{type}_e$ (e.g., residential, footway, primary), and endpoint node coordinates $(u_{\text{lat}}, u_{\text{lng}}, v_{\text{lat}}, v_{\text{lng}})$.
+    \item \textbf{Lighting Infrastructure Features:} Lamp post spatial density $\rho_{\text{lamp}} = \frac{\text{lamp\_count}_e}{l_e / 1000}$ (lamps per km) and binary OSM/municipal lighting flag $\text{lit}_e \in \{0, 1\}$.
+\end{itemize}
+
+\subsubsection{XGBoost Regressor}
+
+XGBoost was selected over alternative models mainly due to three main reasons:
+\begin{enumerate}
+    \item Tree-based gradient boosting outperforms GNNs and deep learning architectures on heterogeneous tabular datasets with dense scalar lag features.
+    \item Native support for categorical features via numerical splits without expanding feature dimentionality.
+    \item Fast prediction latency enabling faster scoring if more frequent data was to be obtained. 
+\end{enumerate}
+
+The model fits an ensemble of $K$ additive decision trees:
+
+\begin{equation*}
+\mathcal{L}(\Theta) = \sum_{e, t} d\left( y_{e,t}, \hat{y}_{e,t} \right) + \sum_{k=1}^K \Omega(f_k)
+\end{equation*}
+
+where $d$ is the loss function \texttt{reg:tweedie}, a distribution defined by $Var(Y) = \phi \mu^p$ where $p$ is variance power parameter. As $p$ is constrained to  $1 < p < 2$ this turns the model into a compound Poisson-Gama distribution which handles zero-inflated data and positive tails. Tweedie unit deviance is as follows: 
+
+$$d(y, \hat{y}) = 2 \left( \frac{y \hat{y}^{1-p}}{1-p} - \frac{\hat{y}^{2-p}}{2-p} - \frac{y^{2-p}}{(1-p)(2-p)} \right)$$
+
+Regularization term  $\Omega(f_k) = \gamma T_k + \frac{1}{2}\lambda \Vert{}w_k\Vert{}^2$ penalizes tree complexity, which then prevents spatial overfitting and results in better, more conservative splits. 
+
+\subsubsection{Data Split Strategy}
+
+To evaluate model generalization without any leakages a chronological split is enforced:
+
+\begin{itemize}
+    \item \textbf{Training Set:} Historical records prior to March 2026.
+    \item \textbf{Test Set:} Historical records from March 2026 onwards.
 \end{itemize}
 
 \subsubsection{Hyperparameter Configuration}
@@ -129,25 +202,6 @@ The pipeline outputs two tables. \texttt{edge\_features.csv} holds the crime and
     \item \textbf{Evaluation Metric:} The model's predictive accuracy is evaluated using Mean Absolute Error (MAE) on the future test set.
     \item \textbf{Interpretability:} Feature importance is calculated and plotted using ``Information Gain'' to determine which variables have the highest predictive power.
 \end{itemize}
-
-\subsubsection{Input Features}
-\begin{itemize}
-    \item \textbf{Historical Lags:} Relies on spatial-temporal lag features, specifically 2, 3, and 4-month historical lags for NetKDE perceived risk and stop-and-search counts.
-    \item \textbf{Static Metadata:} Incorporates street-level characteristics including start/end coordinates (\texttt{u\_lat}, \texttt{v\_lng}, etc.), street length, and highway category.
-    \item \textbf{Lighting Data:} Feeds on static environmental variables like \texttt{lamp\_per\_km} and \texttt{is\_lit}.
-\end{itemize}
-
-\subsubsection{Output Generation \& Routing Integration}
-\begin{itemize}
-    \item \textbf{Baseline Predictions:} The model predicts a raw future safety score, with predictions clipped at a lower bound of 0.
-    \item \textbf{Cost Scaling:} The raw predictions undergo a logarithmic transformation (\texttt{log1p}), followed by min-max scaling to convert them into a standardized 1 to 10 ``Safety Cost'' scale.
-    \item \textbf{Mapping:} The final 1--10 integer values are mapped back to OpenStreetMap (OSM) nodes and edges as safety tags, which are then used as penalty weights by the routing algorithm to calculate the safest daytime and nighttime paths.
-\end{itemize}
-The project proposal considered two candidate architectures: an XGBoost binary classifier feeding an A* search, and a graph attention network (GAT) predicting risk directly over the street network.
-
-What was implemented is an XGBoost \emph{regressor} that forecasts future crime-related risk density at street level. The wide-format monthly dataset is restructured into a long-format panel (one row per street segment per month), and temporal lag features (1-, 2-, and 3-month lookbacks, grouped strictly by street segment) give the model historical context. All-time cumulative columns and same-month target metrics are deliberately excluded from the feature set to prevent data leakage. The data is split chronologically, training on historical months and validating on a held-out future period, rather than using a random split, since a random split would let future information leak into training.
-
-To generate a forward-looking risk estimate, the most recent available month's data is shifted forward to serve as the new one-month lag, and the model's predicted crime count is converted to a density (predicted count divided by street length). This density is min-max scaled into an ordinal \texttt{safety\_tag\_value} from 1 (baseline) to 11 (highest risk), written to \texttt{osm\_safety\_tags.csv} keyed by OpenStreetMap way ID. A minimum tag value is enforced so that no street receives a zero-cost weighting downstream. Node-level aggregation was deliberately not used, since Valhalla's routing costing requires continuous per-edge penalties to discourage travelling \emph{down} a dangerous street, not merely arriving at a risky junction.
 
 \subsection{Routing Integration}
 
