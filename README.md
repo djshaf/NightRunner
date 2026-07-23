@@ -1,18 +1,42 @@
 **Module:** ECS7036P
 **Group:** 8
 
-# AI Approach To Running Route Optimisation For Safety
+# AI Approach to Running Route Optimisation for Safety
 
 # Data Collection and Cleaning
 **Script:** `run_data_pipeline.py`
 
+## How to Run
+
+Install the dependencies once (`polyline` is optional, only needed for the polyline6 routing column):
+
+```
+pip install osmnx geopandas shapely requests pandas pyproj networkx numpy polyline
+```
+
+Then run from the script's folder:
+
+```
+python run_data_pipeline.py
+```
+
+Internet connection is required to reach OpenStreetMap, the UK Police API, and Camden's open data portal. Progress (including which months were used) is printed to the console, and all outputs are written to a `data_out/` folder next to the script. 
+
 ## Purpose
 
-This script builds a street level dataset for a running route safety model. Crime, stop and search, and lighting are each turned into edge level features, one row per street segment.
+This script builds a street-level dataset for a running route safety model. Crime, stop and search, and lighting are each turned into edge level features, one row per street segment.
 
 ## Data Sources
 
 The street network is obtained from OpenStreetMap through OSMnx, using the pedestrian network type. Crime data and stop and search data are both obtained from the UK Police open data API, retrieved by month. Street lighting data is obtained from Camden Council's open data portal.
+
+## Dataset Links
+
+- OpenStreetMap street network (via OSMnx): https://www.openstreetmap.org
+- UK Police crime API: https://data.police.uk/api/crimes-street/all-crime (docs: https://data.police.uk/docs/)
+- UK Police stop-and-search API: https://data.police.uk/api/stops-street
+- Camden street lighting dataset: https://opendata.camden.gov.uk/resource/dfq3-8wzu.json
+- Sunrise-Sunset API (optional day/night helper): https://api.sunrise-sunset.org
 
 ## Date Range
 
@@ -24,7 +48,7 @@ Requests from January 2021 to June 2026. data.police.uk only keeps a rolling ~3 
 
 `crime_perceived_risk` is a separate new column (1 to 4), how unsafe a crime makes an area feel, not how harmful it legally is. Based on Innes (2004) 'Signal crimes and signal disorders', British Journal of Sociology, 55(3), and Innes and Fielding (2002), Sociological Research Online, 7(2): the Signal Crimes Perspective, visible disorder like anti-social behaviour disproportionately drives fear of crime independent of its statistical severity. Also informed by ONS Crime Survey for England and Wales (CSEW) perception/ASB releases. Under this column, anti-social behaviour (3) scores above burglary (2), the reverse of the severity ordering, deliberately.
 
-Both are coarse simplifications onto police.uk's 14 categories, and should be cited as such rather than as a reproduction of either study's exact weights.
+Both are coarse simplifications onto police.uk's 14 categories, and should be cited as such rather than as a reproduction of either study's exact weights. Only perceived risk is used by the model; severity is retained in the dataset but not fed to it.
 
 ## Location Anonymisation and Average Spacing
 
@@ -40,7 +64,7 @@ Type, object of search, outcome, and datetime are kept. Gender, age range, and e
 
 ## Spatial Lag (Neighbouring Streets)
 
-<col>_lag_sum / <col>_lag_mean give the total and average of that column across an edge's directly neighbouring edges (edges sharing a junction node), computed for the four overall totals only. This is a spatial lag: it aggregates over nearby streets within the same month. It is distinct from the temporal lag used in the ML/NN pipeline section below (e.g. crime_count_lag_1), which aggregates over previous months for the same street. Both use the term "lag", but along different axes, spatial versus temporal, and should not be treated as the same type of column.
+`<col>_lag_sum` / `<col>_lag_mean` give the total and average of that column across an edge's directly neighbouring edges (edges sharing a junction node), computed for the four overall totals only. This is a spatial lag: it aggregates over nearby streets within the same month. It is distinct from the temporal lag used in the ML/NN pipeline section below (e.g. `crime_count_lag_1`), which aggregates over previous months for the same street. Both use the term "lag", but along different axes, spatial versus temporal, and should not be treated as the same type of column.
 
 ## Network KDE (NetKDE) Smoothing
 
@@ -50,7 +74,7 @@ The smoothing is applied separately within each month, so no future month can le
 
 ## Lamp Features Kept Separate
 
-Lamp features (\lamp_count`, `lamp_per_km`, `is_lit`) are kept in their own `edge_lamp_features.csv`/`.gpkg` file, separate from `edge_features.csv`, and can be joined back on `edge_id`. Note: no OSM edge in Camden carries a `lit` tag, so `is_lit` here depends entirely on whether a lamp snapped to that edge.
+Lamp features (`lamp_count`, `lamp_per_km`, `is_lit`) are kept in their own `edge_lamp_features.csv`/`.gpkg` file, separate from `edge_features.csv`, and can be joined back on `edge_id`. Note: no OSM edge in Camden carries a `lit` tag, so `is_lit` here depends entirely on whether a lamp snapped to that edge.
 
 ## Cleaning Procedure
 
@@ -66,7 +90,7 @@ Seven files in `data_out`: `crime_points.gpkg`, `stop_search_points.gpkg`, `lamp
 
 ## Requirements
 
-Python with `osmnx`, `geopandas`, `shapely`, `requests`, `pandas`, `pyproj`, and an internet connection to OpenStreetMap, the police API, and Camden's open data portal.
+Python with `osmnx`, `geopandas`, `shapely`, `requests`, `pandas`, `pyproj`, `networkx`, and `numpy` (plus optional `polyline` for the polyline6 column), and an internet connection to OpenStreetMap, the police API, and Camden's open data portal.
 
 # ML/NN pipeline
 
