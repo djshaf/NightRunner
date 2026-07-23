@@ -59,15 +59,15 @@ Raena Fadzil\\
 %%%%%%%%% ABSTRACT
 \begin{abstract}
 
-Can personal safety be treated as a primary objective in pedestrian route planning, rather than an afterthought to distance and time? Mainstream running and navigation apps optimise almost entirely for speed, leaving solo runners, especially after dark, to judge safety for themselves. This project addresses that gap by building and deploying a safety-first, lighting-aware routing tool for the London Borough of Camden. 
+Mainstream running and navigation apps optimise almost entirely for speed, leaving solo runners, especially after dark, to judge safety for themselves. This project addresses that gap by building a safety-first, lighting-aware routing tool for the London Borough of Camden. 
 
-On the data side, open records of crime, stop-and-search, and street lighting are attached to an OpenStreetMap street graph at the level of individual streets. Each crime is scored in two complementary ways, by legal severity and by perceived risk, drawing on the Cambridge Crime Harm Index and the Signal Crimes Perspective, and its influence is spread along the walkable network using a Network-Based Kernel Density Estimate that respects the anonymised resolution of the police data.
+Open records of crime, stop-and-search, and street lighting are attached to an OpenStreetMap street graph. Each crime is scored in two complementary ways, by legal severity and by perceived risk and its influence is spread along the walkable network using a Network-Based Kernel Density Estimate.
 
-After processing, the data is passed through an XGBoost Regressor using spatial-temporal lags and infrastructure metadata received to forecast (perceived) street-level risk. The model employs Tweedie deviance for a zero-inflated, right-skewed distribution seen in this localisation. These continuous values are then scaled and integrated with lighting penalties to be fed into the pathfinding algorithm for optimal, safe routing. 
+The data is passed through an XGBoost Regressor using spatial-temporal lags and infrastructure metadata to forecast (perceived) street-level risk. The model employs Tweedie deviance for a zero-inflated, right-skewed distribution. These continuous values are then scaled and integrated with lighting penalties to be fed into the pathfinding algorithm for optimal, safe routing. 
 
-In a Monte Carlo evaluation of 1,000 random origin-destination pairs across Camden, the recommended route diverged from the shortest path in 98.5\% of cases. Daytime routing reduced crime-risk exposure by 80.46\% for a 7.32\% increase in distance, while night-time routing, which additionally penalises unlit streets, cut darkness exposure by 53.35\% at the cost of a larger 23.15\% detour. The underlying predictive model achieved a mean absolute error of 2.46 on held-out future months.
+In a Monte Carlo evaluation of 1,000 random origin-destination pairs across Camden, the recommended route diverged from the shortest path in 98.5\% of cases. Daytime routing reduced crime-risk exposure by 80.46\% for a 7.32\% increase in distance, while night-time routing, which additionally penalises unlit streets, cut darkness exposure by 53.35\% at the cost of a 23.15\% detour. The predictive model achieved a mean absolute error of 2.46 on held-out future months.
 
-The result is a working prototype showing that data-driven safety routing is feasible and practically useful for everyday runners.
+The result is a prototype showing that data-driven safety routing is feasible and practically useful for everyday runners.
 
 \end{abstract}
 
