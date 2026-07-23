@@ -249,9 +249,9 @@ Night-time routing introduces another objective optimisation problem; due to the
 
 \begin{enumerate}
     \item \textbf{Temporal \& Spatial Aggregation:} UK Police API is subject to a 2-month publication delay, forcing the model to rely on a $t-2$ lag. Adding to this, police crime coordinates are anonymized every ~125m interval, therefore NetKDE smoothing resolves this but leaves the data with artificial peaks. 
-    \item \textbf{Subjectivity:}
-    \item \textbf{Lighting Limitations:}
-    \item \textbf{Static Time-of-Day:}
+    \item \textbf{Subjectivity:}Transformation of raw crime into 1-4 perceived risk categorical index relies on generalized heuristics. Human perception of safety is subjective and non-linear, varying drastically per user. 
+    \item \textbf{Lighting Limitations:} \texttt{is\_lit} environmental variable currently treats streets as a static binary state. It does not account for real-time infrastructure failures or lumen count variation based on any other number of environmental variables. 
+    \item \textbf{Static Time-of-Day:} Currently the switch is on a binary toggle, a more granular time-dependent transitional weighting during dusk and dawn would fit better, but also be computationally prohibitive. 
 \end{enumerate}
 
 \subsection{<PLACEHOLDER>}
