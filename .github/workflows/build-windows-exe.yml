@@ -14,6 +14,14 @@ on:
       - "v*"
   workflow_dispatch:
 
+# Needed for the "Attach to GitHub Release" step below - without this, the
+# default GITHUB_TOKEN is read-only and that step fails with "Resource not
+# accessible by integration" (confirmed: this is exactly what happened on
+# the v1.0 tag push on 2026-07-20 - the .exe built fine, but the release
+# was never created because of this missing permission).
+permissions:
+  contents: write
+
 jobs:
   build-windows-exe:
     runs-on: windows-latest
