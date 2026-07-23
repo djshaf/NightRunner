@@ -200,7 +200,7 @@ To evaluate model generalisation without any leakages, a chronological split is 
     \item \textbf{Chronological Split:} The dataset is split sequentially, using a cutoff month (March 2026) to train on past historical data and test strictly on future data.
     \item \textbf{Data Masking:} Raw identifiers (e.g., \texttt{osmid}, \texttt{edge\_id}, \texttt{name}) and current-month crime totals are dropped to prevent the model from learning raw IDs or experiencing target leakage.
     \item \textbf{Evaluation Metric:} The model's predictive accuracy is evaluated using Mean Absolute Error (MAE) on the future test set.
-    \item \textbf{Interpretability:} Feature importance is calculated and plotted using ``Information Gain'' to determine which variables have the highest predictive power.
+    \item \textbf{Interpretability:} Feature importance is calculated and plotted using ``Information Gain'' to determine which variables have the highest predictive power. (See Appendix \ref{app:evaluation})
 \end{itemize}
 
 \subsection{Routing Integration}
@@ -326,5 +326,17 @@ Note: For the rubric, refer to the Group Project Guidelines: \url{https://qmplus
     
     \textit{\small (Data derived from the routing evaluation output generated on random seed 42)}
 \end{table}
+
+\section{Model Evaluation} \label{app:evaluation}
+
+\begin{figure}[h]
+\begin{center}
+
+   \includegraphics[width=0.8\linewidth]{figures/information-gain.png} 
+\end{center}
+   \caption{Feature importance measured by Information Gain.}
+
+   \label{fig:information-gain} 
+\end{figure}
 
 \end{document}
