@@ -1,5 +1,9 @@
 name: Build Slides PDF
-on: [push]
+on:
+  push:
+    paths:
+      - 'report-latex/slides.tex'
+      - '.github/workflows/build_slides.yml'
 
 jobs:
   build_slides:
